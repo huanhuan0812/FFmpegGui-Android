@@ -1,14 +1,9 @@
 package com.huanhuan.ffmpeggui
 
 import android.Manifest
-import android.content.ContentValues
-import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,7 +24,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import java.io.File
-import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -79,64 +73,22 @@ fun AudioExtractScreen(
         }
     }
 
-    // 保存文件到Download文件夹
-    fun saveToDownloads(context: Context, sourceFile: File, fileName: String): Uri? {
-        return (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Android 10+ 使用 MediaStore
-            val resolver = context.contentResolver
-            val contentValues = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.MediaColumns.MIME_TYPE, getMimeType(fileName))
-                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            }
-
-            try {
-                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-                uri?.let {
-                    resolver.openOutputStream(it)?.use { outputStream ->
-                        sourceFile.inputStream().use { inputStream ->
-                            inputStream.copyTo(outputStream)
-                        }
-                    }
-                }
-                uri
-            } catch (e: Exception) {
-                e.printStackTrace()
-                null
-            }
+    LaunchedEffect(Unit) {
+        val permissions = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.READ_MEDIA_VIDEO)
+            permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
         } else {
-            // Android 9及以下使用传统方式
-            if (Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED) {
-                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                val destFile = File(downloadsDir, fileName)
-                try {
-                    sourceFile.copyTo(destFile, overwrite = true)
-                    // 发送广播通知系统文件已创建
-                    context.sendBroadcast(
-                        Intent(
-                            Intent.ACTION_MEDIA_SCANNER_SCAN_FILE,
-                            Uri.fromFile(destFile))
-                    )
-                    Uri.fromFile(destFile)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    null
-                }
-            } else {
-                null
-            }
-        }) as Uri?
-    }
+            permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
 
-    // 根据文件扩展名获取MIME类型
-    fun getMimeType(fileName: String): String {
-        return when (fileName.substringAfterLast(".").lowercase()) {
-            "mp3" -> "audio/mpeg"
-            "aac" -> "audio/aac"
-            "flac" -> "audio/flac"
-            "wav" -> "audio/wav"
-            "ogg" -> "audio/ogg"
-            else -> "application/octet-stream"
+        val missingPermissions = permissions.filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (missingPermissions.isNotEmpty()) {
+            permissionLauncher.launch(missingPermissions.toTypedArray())
         }
     }
 
@@ -173,20 +125,7 @@ fun AudioExtractScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Button(
-                        onClick = {
-                            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
-                                // Android 9及以下需要检查权限
-                                val permission = ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.WRITE_EXTERNAL_STORAGE
-                                )
-                                if (permission != PackageManager.PERMISSION_GRANTED) {
-                                    permissionLauncher.launch(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE))
-                                    return@Button
-                                }
-                            }
-                            filePickerLauncher.launch("video/*")
-                        },
+                        onClick = { filePickerLauncher.launch("video/*") },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Default.VideoFile, contentDescription = null)
@@ -282,48 +221,40 @@ fun AudioExtractScreen(
                     }
 
                     val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-
-                    // 先保存到应用缓存目录作为临时文件
-                    val tempDir = File(context.cacheDir, "temp_audio")
-                    if (!tempDir.exists()) {
-                        tempDir.mkdirs()
+                    val outputDir = File(context.getExternalFilesDir(null), "FFmpegOutput")
+                    if (!outputDir.exists()) {
+                        outputDir.mkdirs()
                     }
-                    val tempFile = File(tempDir, "${outputFileName}_${timestamp}.${selectedAudioFormat}")
+
+                    val outputFile = File(outputDir, "${outputFileName}_${timestamp}.${selectedAudioFormat}")
 
                     viewModel.extractAudio(
                         inputPath = selectedVideoPath!!,
-                        outputPath = tempFile.absolutePath
-                    ) { success, outputPath ->
-                        if (success && isScreenActive) {
-                            val sourceFile = File(outputPath)
-                            val finalFileName = "${outputFileName}_${timestamp}.${selectedAudioFormat}"
-
-                            // 保存到Download文件夹
-                            val downloadUri = saveToDownloads(context, sourceFile, finalFileName)
-
-                            if (downloadUri != null) {
-                                Toast.makeText(context, "音频已保存到Download文件夹", Toast.LENGTH_LONG).show()
-
-                                // 删除临时文件
-                                try {
-                                    sourceFile.delete()
-                                    tempDir.delete()
-                                } catch (e: Exception) {
-                                    e.printStackTrace()
-                                }
-
-                                // 导航到结果页面
-                                navController.navigate("result/${Uri.encode(downloadUri.toString())}") {
-                                    launchSingleTop = true
-                                    popUpTo("audio_extract") {
-                                        inclusive = false
-                                    }
-                                }
+                        outputPath = outputFile.absolutePath
+                    ) { success, message ->
+                        // 检查屏幕是否仍然活跃
+                        if (!isScreenActive) {
+                            // 屏幕已销毁，只显示通知
+                            if (success) {
+                                Toast.makeText(context, "音频提取完成: ${outputFile.name}", Toast.LENGTH_LONG).show()
                             } else {
-                                Toast.makeText(context, "保存到Download文件夹失败", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                             }
-                        } else if (!success && isScreenActive) {
-                            Toast.makeText(context, "音频提取失败", Toast.LENGTH_LONG).show()
+                            return@extractAudio
+                        }
+
+                        // 屏幕仍然活跃，正常处理
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        if (success) {
+                            // 使用协程延迟一小段时间确保导航安全
+                            navController.navigate("result/${Uri.encode(outputFile.absolutePath)}") {
+                                // 避免重复导航
+                                launchSingleTop = true
+                                // 清除可能存在的旧目标
+                                popUpTo("audio_extract") {
+                                    inclusive = false
+                                }
+                            }
                         }
                     }
                 },

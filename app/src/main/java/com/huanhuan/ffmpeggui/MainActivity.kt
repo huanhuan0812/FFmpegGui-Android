@@ -266,17 +266,6 @@ fun MainScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("历史记录")
                     }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    OutlinedButton(
-                        onClick = onNavigateToAbout,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Default.Info, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("关于")
-                    }
                 }
             }
         }

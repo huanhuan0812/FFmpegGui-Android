@@ -2,6 +2,7 @@ package com.huanhuan.ffmpeggui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -14,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -30,6 +32,10 @@ fun AudioConvertScreen(
     viewModel: FFmpegViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // 添加屏幕活跃状态
+    var isScreenActive by remember { mutableStateOf(true) }
 
     var selectedAudioPath by remember { mutableStateOf<String?>(null) }
     var outputFileName by remember { mutableStateOf("") }
@@ -43,6 +49,37 @@ fun AudioConvertScreen(
     val bitrates = listOf("128k", "192k", "256k", "320k")
     val sampleRates = listOf("22050", "44100", "48000")
     val channels = listOf("1", "2")
+
+    // 监听生命周期
+    DisposableEffect(lifecycleOwner) {
+        onDispose {
+            isScreenActive = false
+        }
+    }
+
+    // 监听处理事件
+    LaunchedEffect(viewModel) {
+        viewModel.processingEvents.collect { event ->
+            when (event) {
+                is ProcessingEvent.Completed -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
+                    if (event.success && isScreenActive) {
+                        // 对文件路径进行编码，避免特殊字符问题
+                        val encodedPath = Uri.encode(event.outputPath)
+                        navController.navigate("result/${encodedPath}") {
+                            launchSingleTop = true
+                            popUpTo("audio_convert") {
+                                inclusive = false
+                            }
+                        }
+                    }
+                }
+                ProcessingEvent.Cancelled -> {
+                    Toast.makeText(context, "处理已取消", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -260,7 +297,6 @@ fun AudioConvertScreen(
                                 modifier = Modifier.padding(bottom = 8.dp)
                             )
 
-                            // 使用FilterChip替代AssistChip
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -284,7 +320,6 @@ fun AudioConvertScreen(
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
 
-                        // 使用FilterChip替代AssistChip
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -308,7 +343,6 @@ fun AudioConvertScreen(
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
 
-                        // 使用FilterChip替代AssistChip
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -410,19 +444,16 @@ fun AudioConvertScreen(
 
                     Toast.makeText(context, settings, Toast.LENGTH_SHORT).show()
 
+                    // 移除回调，通过 processingEvents 处理结果
                     viewModel.convertAudio(
                         inputPath = selectedAudioPath!!,
                         outputPath = outputFile.absolutePath,
                         format = selectedOutputFormat,
                         bitrate = selectedBitrate,
                         sampleRate = selectedSampleRate,
-                        channels = selectedChannels
-                    ) { success, message ->
-                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                        if (success) {
-                            navController.navigate("result/${outputFile.absolutePath}")
-                        }
-                    }
+                        channels = selectedChannels,
+                        onComplete = { _, _ -> } // 空实现
+                    )
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -449,8 +480,8 @@ fun AudioConvertScreen(
             if (viewModel.isProcessing) {
                 OutlinedButton(
                     onClick = {
-                        // 这里可以添加取消转换的功能
-                        Toast.makeText(context, "正在开发取消功能...", Toast.LENGTH_SHORT).show()
+                        viewModel.cancelCurrentProcessing()
+                        Toast.makeText(context, "正在取消...", Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {

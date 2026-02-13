@@ -2,6 +2,7 @@ package com.huanhuan.ffmpeggui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -15,9 +16,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import java.io.File
@@ -32,11 +35,21 @@ fun AudioExtractScreen(
     viewModel: FFmpegViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     var selectedVideoPath by remember { mutableStateOf<String?>(null) }
     var outputFileName by remember { mutableStateOf("") }
     var selectedAudioFormat by remember { mutableStateOf("mp3") }
     val audioFormats = listOf("mp3", "aac", "flac", "wav", "ogg")
+
+    // 添加一个状态来跟踪屏幕是否仍然活动
+    var isScreenActive by remember { mutableStateOf(true) }
+
+    DisposableEffect(lifecycleOwner) {
+        onDispose {
+            isScreenActive = false
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -60,22 +73,25 @@ fun AudioExtractScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        val permissions = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.READ_MEDIA_VIDEO)
-            permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
-        } else {
-            permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-            permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        }
-
-        val missingPermissions = permissions.filter {
-            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
-        }
-
-        if (missingPermissions.isNotEmpty()) {
-            permissionLauncher.launch(missingPermissions.toTypedArray())
+    LaunchedEffect(viewModel) {
+        viewModel.processingEvents.collect { event ->
+            when (event) {
+                is ProcessingEvent.Completed -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
+                    if (event.success && isScreenActive) {
+                        // 确保导航在屏幕活跃时执行
+                        navController.navigate("result/${Uri.encode(event.outputPath)}") {
+                            launchSingleTop = true
+                            popUpTo("audio_extract") {
+                                inclusive = false
+                            }
+                        }
+                    }
+                }
+                ProcessingEvent.Cancelled -> {
+                    Toast.makeText(context, "处理已取消", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
@@ -215,14 +231,12 @@ fun AudioExtractScreen(
 
                     val outputFile = File(outputDir, "${outputFileName}_${timestamp}.${selectedAudioFormat}")
 
+                    // 移除回调，因为我们现在通过 processingEvents 处理结果
                     viewModel.extractAudio(
                         inputPath = selectedVideoPath!!,
                         outputPath = outputFile.absolutePath
-                    ) { success, message ->
-                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                        if (success) {
-                            navController.navigate("result/${outputFile.absolutePath}")
-                        }
+                    ) { _, _ ->
+                        // 空实现，结果通过 processingEvents 处理
                     }
                 },
                 modifier = Modifier

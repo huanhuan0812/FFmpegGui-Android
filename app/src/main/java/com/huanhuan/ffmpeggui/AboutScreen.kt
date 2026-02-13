@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.core.net.toUri
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -206,7 +207,7 @@ fun AboutScreen(
                                     fontWeight = FontWeight.Medium
                                 )
                                 Text(
-                                    text = "版本 4.4.LTS",
+                                    text = "版本 6.1.7",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -277,7 +278,7 @@ fun AboutScreen(
                                     try {
                                         val intent = Intent(
                                             Intent.ACTION_VIEW,
-                                            Uri.parse("https://github.com/yourusername/ffmpeg-gui-android")
+                                            "https://github.com/huanhuan0812/FFmpegGui-Android".toUri()
                                         )
                                         context.startActivity(intent)
                                     } catch (e: Exception) {
@@ -307,7 +308,7 @@ fun AboutScreen(
                                     try {
                                         val intent = Intent(
                                             Intent.ACTION_SENDTO,
-                                            Uri.parse("mailto:your.email@example.com")
+                                            "qdhuanhuan08@outlook.com".toUri()
                                         )
                                         context.startActivity(intent)
                                     } catch (e: Exception) {
@@ -337,7 +338,7 @@ fun AboutScreen(
                                     try {
                                         val intent = Intent(
                                             Intent.ACTION_VIEW,
-                                            Uri.parse("https://your-website.com")
+                                            Uri.parse("https://huanhuan0812.github.io/")
                                         )
                                         context.startActivity(intent)
                                     } catch (e: Exception) {

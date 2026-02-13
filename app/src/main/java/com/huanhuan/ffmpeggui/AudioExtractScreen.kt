@@ -1,9 +1,14 @@
 package com.huanhuan.ffmpeggui
 
 import android.Manifest
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,6 +29,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -73,25 +79,64 @@ fun AudioExtractScreen(
         }
     }
 
-    LaunchedEffect(viewModel) {
-        viewModel.processingEvents.collect { event ->
-            when (event) {
-                is ProcessingEvent.Completed -> {
-                    Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
-                    if (event.success && isScreenActive) {
-                        // 确保导航在屏幕活跃时执行
-                        navController.navigate("result/${Uri.encode(event.outputPath)}") {
-                            launchSingleTop = true
-                            popUpTo("audio_extract") {
-                                inclusive = false
-                            }
+    // 保存文件到Download文件夹
+    fun saveToDownloads(context: Context, sourceFile: File, fileName: String): Uri? {
+        return (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Android 10+ 使用 MediaStore
+            val resolver = context.contentResolver
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, getMimeType(fileName))
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            }
+
+            try {
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                uri?.let {
+                    resolver.openOutputStream(it)?.use { outputStream ->
+                        sourceFile.inputStream().use { inputStream ->
+                            inputStream.copyTo(outputStream)
                         }
                     }
                 }
-                ProcessingEvent.Cancelled -> {
-                    Toast.makeText(context, "处理已取消", Toast.LENGTH_SHORT).show()
-                }
+                uri
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
             }
+        } else {
+            // Android 9及以下使用传统方式
+            if (Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED) {
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val destFile = File(downloadsDir, fileName)
+                try {
+                    sourceFile.copyTo(destFile, overwrite = true)
+                    // 发送广播通知系统文件已创建
+                    context.sendBroadcast(
+                        Intent(
+                            Intent.ACTION_MEDIA_SCANNER_SCAN_FILE,
+                            Uri.fromFile(destFile))
+                    )
+                    Uri.fromFile(destFile)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    null
+                }
+            } else {
+                null
+            }
+        }) as Uri?
+    }
+
+    // 根据文件扩展名获取MIME类型
+    fun getMimeType(fileName: String): String {
+        return when (fileName.substringAfterLast(".").lowercase()) {
+            "mp3" -> "audio/mpeg"
+            "aac" -> "audio/aac"
+            "flac" -> "audio/flac"
+            "wav" -> "audio/wav"
+            "ogg" -> "audio/ogg"
+            else -> "application/octet-stream"
         }
     }
 
@@ -128,7 +173,20 @@ fun AudioExtractScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Button(
-                        onClick = { filePickerLauncher.launch("video/*") },
+                        onClick = {
+                            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+                                // Android 9及以下需要检查权限
+                                val permission = ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                )
+                                if (permission != PackageManager.PERMISSION_GRANTED) {
+                                    permissionLauncher.launch(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE))
+                                    return@Button
+                                }
+                            }
+                            filePickerLauncher.launch("video/*")
+                        },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Default.VideoFile, contentDescription = null)
@@ -224,19 +282,49 @@ fun AudioExtractScreen(
                     }
 
                     val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                    val outputDir = File(context.getExternalFilesDir(null), "FFmpegOutput")
-                    if (!outputDir.exists()) {
-                        outputDir.mkdirs()
+
+                    // 先保存到应用缓存目录作为临时文件
+                    val tempDir = File(context.cacheDir, "temp_audio")
+                    if (!tempDir.exists()) {
+                        tempDir.mkdirs()
                     }
+                    val tempFile = File(tempDir, "${outputFileName}_${timestamp}.${selectedAudioFormat}")
 
-                    val outputFile = File(outputDir, "${outputFileName}_${timestamp}.${selectedAudioFormat}")
-
-                    // 移除回调，因为我们现在通过 processingEvents 处理结果
                     viewModel.extractAudio(
                         inputPath = selectedVideoPath!!,
-                        outputPath = outputFile.absolutePath
-                    ) { _, _ ->
-                        // 空实现，结果通过 processingEvents 处理
+                        outputPath = tempFile.absolutePath
+                    ) { success, outputPath ->
+                        if (success && isScreenActive) {
+                            val sourceFile = File(outputPath)
+                            val finalFileName = "${outputFileName}_${timestamp}.${selectedAudioFormat}"
+
+                            // 保存到Download文件夹
+                            val downloadUri = saveToDownloads(context, sourceFile, finalFileName)
+
+                            if (downloadUri != null) {
+                                Toast.makeText(context, "音频已保存到Download文件夹", Toast.LENGTH_LONG).show()
+
+                                // 删除临时文件
+                                try {
+                                    sourceFile.delete()
+                                    tempDir.delete()
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+
+                                // 导航到结果页面
+                                navController.navigate("result/${Uri.encode(downloadUri.toString())}") {
+                                    launchSingleTop = true
+                                    popUpTo("audio_extract") {
+                                        inclusive = false
+                                    }
+                                }
+                            } else {
+                                Toast.makeText(context, "保存到Download文件夹失败", Toast.LENGTH_LONG).show()
+                            }
+                        } else if (!success && isScreenActive) {
+                            Toast.makeText(context, "音频提取失败", Toast.LENGTH_LONG).show()
+                        }
                     }
                 },
                 modifier = Modifier

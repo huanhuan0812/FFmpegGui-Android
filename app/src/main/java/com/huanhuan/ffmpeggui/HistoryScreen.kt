@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -154,10 +155,13 @@ fun HistoryItem(task: ConversionTask) {
 
                 if (task.status == "完成") {
                     LinearProgressIndicator(
-                        progress = task.progress,
-                        modifier = Modifier
-                            .width(80.dp)
-                            .height(4.dp)
+                    progress = { task.progress },
+                    modifier = Modifier
+                        .width(80.dp)
+                        .height(4.dp),
+                        color = ProgressIndicatorDefaults.linearColor,
+                        trackColor = ProgressIndicatorDefaults.linearTrackColor,
+                        strokeCap = ProgressIndicatorDefaults.LinearStrokeCap,
                     )
                 }
             }

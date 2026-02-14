@@ -8,6 +8,8 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -18,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import java.io.File
@@ -32,7 +35,10 @@ fun AudioConvertScreen(
     viewModel: FFmpegViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    // 添加滚动状态
+    val scrollState = rememberScrollState()
 
     // 添加屏幕活跃状态
     var isScreenActive by remember { mutableStateOf(true) }
@@ -139,6 +145,7 @@ fun AudioConvertScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .verticalScroll(scrollState) // 添加垂直滚动
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -182,12 +189,14 @@ fun AudioConvertScreen(
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Column {
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
                                     Text(
                                         text = File(selectedAudioPath!!).name,
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        maxLines = 1
+                                        maxLines = 2
                                     )
                                     Text(
                                         text = formatFileSize(File(selectedAudioPath!!).length()),
@@ -297,9 +306,10 @@ fun AudioConvertScreen(
                                 modifier = Modifier.padding(bottom = 8.dp)
                             )
 
-                            Row(
+                            FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 bitrates.forEach { bitrate ->
                                     FilterChip(
@@ -320,9 +330,10 @@ fun AudioConvertScreen(
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
 
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             sampleRates.forEach { rate ->
                                 FilterChip(
@@ -343,9 +354,10 @@ fun AudioConvertScreen(
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
 
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             channels.forEach { channel ->
                                 FilterChip(
@@ -407,9 +419,8 @@ fun AudioConvertScreen(
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(16.dp))
             }
-
-            Spacer(modifier = Modifier.weight(1f))
 
             // 开始转换按钮
             Button(
@@ -488,6 +499,9 @@ fun AudioConvertScreen(
                     Text("取消")
                 }
             }
+
+            // 添加底部间距，确保滚动时最后一个元素不会被底部导航栏遮挡
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

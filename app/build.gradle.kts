@@ -14,7 +14,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.huanhuan.fmpeggui"
+        applicationId = "com.huanhuan.ffmpeggui"
         minSdk = 26
         targetSdk = 36
 

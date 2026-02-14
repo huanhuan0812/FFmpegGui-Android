@@ -14,6 +14,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -54,6 +55,7 @@ fun ResultScreen(
     val context = LocalContext.current
     val outputFile = File(outputPath)
     var showExportDialog by remember { mutableStateOf(false) }
+    var isExportedSuccessfully by remember { mutableStateOf(false) } // 标记是否导出成功
 
     // 导出文件函数
     fun exportFile(destination: String): ExportResult {
@@ -66,10 +68,6 @@ fun ResultScreen(
             }
 
             if (success) {
-                // 导出成功后删除临时文件
-                if (outputFile.exists()) {
-                    outputFile.delete()
-                }
                 ExportResult.Success
             } else {
                 ExportResult.Error("导出失败")
@@ -79,13 +77,22 @@ fun ResultScreen(
         }
     }
 
+    // 离开界面时检查是否导出成功，成功则删除临时文件
+    DisposableEffect(Unit) {
+        onDispose {
+            if (isExportedSuccessfully && outputFile.exists()) {
+                outputFile.delete()
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("处理完成") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -237,6 +244,7 @@ fun ResultScreen(
                 val result = exportFile(destination)
                 when (result) {
                     is ExportResult.Success -> {
+                        isExportedSuccessfully = true
                         Toast.makeText(
                             context,
                             "文件已导出到${destination}目录",
@@ -328,13 +336,13 @@ fun saveToDownloads(context: Context, file: File): Boolean {
     }
 }
 
-// 保存到相册
+// 保存到视频目录
 fun saveToPictures(context: Context, file: File): Boolean {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         saveUsingMediaStore(
             context = context,
             file = file,
-            collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
             relativePath = Environment.DIRECTORY_PICTURES
         )
     } else {

@@ -8,6 +8,8 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -21,6 +23,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import java.io.File
@@ -35,12 +38,13 @@ fun AudioExtractScreen(
     viewModel: FFmpegViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
     var selectedVideoPath by remember { mutableStateOf<String?>(null) }
     var outputFileName by remember { mutableStateOf("") }
     var selectedAudioFormat by remember { mutableStateOf("mp3") }
     val audioFormats = listOf("mp3", "aac", "flac", "wav", "ogg")
+    val scrollState = rememberScrollState() // 添加滚动状态
 
     // 添加一个状态来跟踪屏幕是否仍然活动
     var isScreenActive by remember { mutableStateOf(true) }
@@ -108,6 +112,7 @@ fun AudioExtractScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .verticalScroll(scrollState) // 添加垂直滚动
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -138,7 +143,8 @@ fun AudioExtractScreen(
                         Text(
                             text = File(selectedVideoPath!!).name,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 2 // 限制行数，防止文件名过长
                         )
                     }
                 }
@@ -174,9 +180,11 @@ fun AudioExtractScreen(
                         style = MaterialTheme.typography.bodyMedium
                     )
 
-                    Row(
+                    // 使用 FlowRow 让格式标签在需要时自动换行
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         audioFormats.forEach { format ->
                             FilterChip(
@@ -194,18 +202,29 @@ fun AudioExtractScreen(
 
             // 处理状态
             if (viewModel.isProcessing) {
-                LinearProgressIndicator(
-                    progress = viewModel.progress,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "正在处理: ${(viewModel.progress * 100).toInt()}%",
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        LinearProgressIndicator(
+                            progress = viewModel.progress,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "正在处理: ${(viewModel.progress * 100).toInt()}%",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
-
-            Spacer(modifier = Modifier.weight(1f))
 
             // 开始转换按钮
             Button(
@@ -276,6 +295,9 @@ fun AudioExtractScreen(
                     Text("开始提取音频")
                 }
             }
+
+            // 添加底部间距，确保滚动时最后一个元素不会被底部导航栏遮挡
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

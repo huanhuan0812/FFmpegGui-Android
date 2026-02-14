@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -139,7 +140,11 @@ fun AboutScreen(
                             description = "从视频文件中提取音频轨，支持MP3、AAC、FLAC、WAV等多种格式"
                         )
 
-                        Divider(modifier = Modifier.padding(vertical = 12.dp))
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            thickness = DividerDefaults.Thickness,
+                            color = DividerDefaults.color
+                        )
 
                         FeatureItem(
                             icon = Icons.Default.MusicNote,
@@ -147,7 +152,11 @@ fun AboutScreen(
                             description = "在各种音频格式之间相互转换，支持比特率、采样率、声道等参数调整"
                         )
 
-                        Divider(modifier = Modifier.padding(vertical = 12.dp))
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            thickness = DividerDefaults.Thickness,
+                            color = DividerDefaults.color
+                        )
 
                         FeatureItem(
                             icon = Icons.Default.VideoLibrary,
@@ -338,7 +347,7 @@ fun AboutScreen(
                                     try {
                                         val intent = Intent(
                                             Intent.ACTION_VIEW,
-                                            Uri.parse("https://huanhuan0812.github.io/")
+                                            "https://huanhuan0812.github.io/".toUri()
                                         )
                                         context.startActivity(intent)
                                     } catch (e: Exception) {

@@ -1,7 +1,15 @@
 package com.huanhuan.ffmpeggui
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,8 +21,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
+import java.io.IOException
+
+// 权限检查扩展函数
+fun Context.hasStoragePermission(): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        // Android 10+ 使用分区存储，不需要传统存储权限
+        true
+    } else {
+        ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+    }
+}
+
+// 请求权限的返回类型
+sealed class ExportResult {
+    object Success : ExportResult()
+    data class Error(val message: String) : ExportResult()
+    object PermissionDenied : ExportResult()
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,6 +53,31 @@ fun ResultScreen(
 ) {
     val context = LocalContext.current
     val outputFile = File(outputPath)
+    var showExportDialog by remember { mutableStateOf(false) }
+
+    // 导出文件函数
+    fun exportFile(destination: String): ExportResult {
+        return try {
+            val success = when (destination) {
+                "下载" -> saveToDownloads(context, outputFile)
+                "相册" -> saveToPictures(context, outputFile)
+                "音乐" -> saveToMusic(context, outputFile)
+                else -> false
+            }
+
+            if (success) {
+                // 导出成功后删除临时文件
+                if (outputFile.exists()) {
+                    outputFile.delete()
+                }
+                ExportResult.Success
+            } else {
+                ExportResult.Error("导出失败")
+            }
+        } catch (e: Exception) {
+            ExportResult.Error(e.message ?: "未知错误")
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -91,6 +144,7 @@ fun ResultScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // 播放按钮
                     OutlinedButton(
                         onClick = {
                             try {
@@ -115,6 +169,16 @@ fun ResultScreen(
                         Text("播放")
                     }
 
+                    // 导出按钮
+                    Button(
+                        onClick = { showExportDialog = true }
+                    ) {
+                        Icon(Icons.Default.ImportExport, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("导出到")
+                    }
+
+                    // 分享按钮
                     Button(
                         onClick = {
                             try {
@@ -156,6 +220,191 @@ fun ResultScreen(
             }
         }
     }
+
+    // 导出选项对话框
+    if (showExportDialog) {
+        ExportDialog(
+            onDismiss = { showExportDialog = false },
+            onExport = { destination ->
+                // 检查权限
+                if (!context.hasStoragePermission()) {
+                    Toast.makeText(context, "需要存储权限才能导出文件", Toast.LENGTH_SHORT).show()
+                    showExportDialog = false
+                    return@ExportDialog
+                }
+
+                // 执行导出
+                val result = exportFile(destination)
+                when (result) {
+                    is ExportResult.Success -> {
+                        Toast.makeText(
+                            context,
+                            "文件已导出到${destination}目录",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    is ExportResult.Error -> {
+                        Toast.makeText(
+                            context,
+                            "导出失败: ${result.message}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    ExportResult.PermissionDenied -> {
+                        Toast.makeText(context, "权限被拒绝", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                showExportDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+fun ExportDialog(
+    onDismiss: () -> Unit,
+    onExport: (String) -> Unit
+) {
+    val options = listOf("下载", "相册", "音乐")
+    var selectedOption by remember { mutableStateOf(options[0]) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("导出文件") },
+        text = {
+            Column {
+                Text("请选择导出位置")
+                Spacer(modifier = Modifier.height(8.dp))
+                options.forEach { option ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        RadioButton(
+                            selected = selectedOption == option,
+                            onClick = { selectedOption = option }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = option,
+                            modifier = Modifier.align(Alignment.CenterVertically)
+                        )
+                    }
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onExport(selectedOption)
+                }
+            ) {
+                Text("导出")
+            }
+        }
+    )
+}
+
+// 保存到下载目录
+fun saveToDownloads(context: Context, file: File): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        saveUsingMediaStore(
+            context = context,
+            file = file,
+            collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            relativePath = Environment.DIRECTORY_DOWNLOADS
+        )
+    } else {
+        saveToPublicDirectory(
+            file = file,
+            directoryType = Environment.DIRECTORY_DOWNLOADS
+        )
+    }
+}
+
+// 保存到相册
+fun saveToPictures(context: Context, file: File): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        saveUsingMediaStore(
+            context = context,
+            file = file,
+            collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            relativePath = Environment.DIRECTORY_PICTURES
+        )
+    } else {
+        saveToPublicDirectory(
+            file = file,
+            directoryType = Environment.DIRECTORY_PICTURES
+        )
+    }
+}
+
+// 保存到音乐目录
+fun saveToMusic(context: Context, file: File): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        saveUsingMediaStore(
+            context = context,
+            file = file,
+            collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            relativePath = Environment.DIRECTORY_MUSIC
+        )
+    } else {
+        saveToPublicDirectory(
+            file = file,
+            directoryType = Environment.DIRECTORY_MUSIC
+        )
+    }
+}
+
+// 使用 MediaStore API 保存（Android 10+）
+private fun saveUsingMediaStore(
+    context: Context,
+    file: File,
+    collection: Uri,
+    relativePath: String
+): Boolean {
+    return try {
+        val contentValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, file.name)
+            put(MediaStore.MediaColumns.MIME_TYPE, getMimeType(file.name))
+            put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+        }
+
+        val uri = context.contentResolver.insert(collection, contentValues)
+        uri?.let {
+            context.contentResolver.openOutputStream(it)?.use { outputStream ->
+                file.inputStream().use { inputStream ->
+                    inputStream.copyTo(outputStream)
+                }
+            }
+            true
+        } ?: false
+    } catch (e: IOException) {
+        e.printStackTrace()
+        false
+    }
+}
+
+// 保存到公共目录（Android 9及以下）
+private fun saveToPublicDirectory(file: File, directoryType: String): Boolean {
+    return try {
+        val dir = Environment.getExternalStoragePublicDirectory(directoryType)
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
+        val destFile = File(dir, file.name)
+        file.copyTo(destFile, overwrite = true)
+        true
+    } catch (e: IOException) {
+        e.printStackTrace()
+        false
+    }
 }
 
 @Composable
@@ -179,6 +428,7 @@ fun InfoRow(label: String, value: String) {
     }
 }
 
+@SuppressLint("DefaultLocale")
 fun formatFileSize(size: Long): String {
     val units = listOf("B", "KB", "MB", "GB")
     var fileSize = size.toFloat()

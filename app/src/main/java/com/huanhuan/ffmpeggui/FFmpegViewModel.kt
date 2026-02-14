@@ -172,27 +172,77 @@ class FFmpegViewModel : ViewModel() {
     ) {
         val codec = getAudioCodec(format)
 
-        val command = buildString {
-            append("-i \"$inputPath\"")
-            append(" -acodec $codec")
+        // 构建命令列表而不是字符串，避免引号问题
+        val commandList = mutableListOf(
+            "-i", inputPath,
+            "-y",  // 覆盖输出文件
+            "-vn"  // 无视频
+        )
 
-            if (format != "flac" && format != "wav" && bitrate.isNotBlank()) {
-                append(" -b:a $bitrate")
+        // 添加音频编码器
+        commandList.add("-acodec")
+        commandList.add(codec)
+
+        // 添加采样率
+        if (sampleRate.isNotBlank()) {
+            commandList.add("-ar")
+            commandList.add(sampleRate)
+        }
+
+        // 添加声道数
+        if (channels.isNotBlank()) {
+            commandList.add("-ac")
+            commandList.add(channels)
+        }
+
+        // 添加比特率（如果适用）
+        if (bitrate.isNotBlank()) {
+            when (format.lowercase(Locale.getDefault())) {
+                "mp3", "aac", "m4a" -> {
+                    commandList.add("-b:a")
+                    commandList.add(bitrate)
+                }
+                "ogg" -> {
+                    // Opus 编码器特定参数
+                    commandList.add("-b:a")
+                    commandList.add(bitrate)
+
+                    // Opus 优化参数
+                    commandList.add("-compression_level")
+                    commandList.add("10")  // 最高压缩质量
+
+                    // 根据比特率选择应用场景
+                    when {
+                        bitrate.endsWith("k") && bitrate.substring(0, bitrate.length-1).toIntOrNull()?.let { it <= 96 } == true -> {
+                            // 低比特率时使用语音优化
+                            commandList.add("-application")
+                            commandList.add("lowdelay")
+                        }
+                        else -> {
+                            // 高比特率时使用音频优化
+                            commandList.add("-application")
+                            commandList.add("audio")
+                        }
+                    }
+
+                    // 设置帧大小（20ms 是标准值）
+                    commandList.add("-frame_duration")
+                    commandList.add("20")
+                }
+                // flac 和 wav 不需要比特率设置
             }
+        }
 
-            if (sampleRate.isNotBlank()) {
-                append(" -ar $sampleRate")
-            }
+        // 添加输出路径
+        commandList.add(outputPath)
 
-            if (channels.isNotBlank()) {
-                append(" -ac $channels")
-            }
-
-            append(" -y \"$outputPath\"")
+        // 将命令列表转换为字符串用于显示
+        val commandString = commandList.joinToString(" ") {
+            if (it.contains(" ")) "\"$it\"" else it
         }
 
         executeFFmpegCommand(
-            command = command,
+            command = commandString,
             taskId = UUID.randomUUID().toString(),
             type = "音频转换 - ${format.uppercase(Locale.getDefault())}",
             inputPath = inputPath,
@@ -302,7 +352,8 @@ class FFmpegViewModel : ViewModel() {
             "aac" -> "aac"
             "flac" -> "flac"
             "wav" -> "pcm_s16le"
-            "ogg" -> "libvorbis"
+            "ogg" -> "libopus"  // 从 libvorbis 改为 libopus
+            "m4a" -> "aac"
             else -> "copy"
         }
     }

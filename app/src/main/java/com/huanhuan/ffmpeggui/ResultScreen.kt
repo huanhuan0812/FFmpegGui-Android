@@ -24,7 +24,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
 import java.io.IOException
 
@@ -231,6 +230,7 @@ fun ResultScreen(
     // 导出选项对话框
     if (showExportDialog) {
         ExportDialog(
+            file = outputFile,
             onDismiss = { showExportDialog = false },
             onExport = { destination ->
                 // 检查权限
@@ -270,11 +270,21 @@ fun ResultScreen(
 
 @Composable
 fun ExportDialog(
+    file: File,
     onDismiss: () -> Unit,
     onExport: (String) -> Unit
 ) {
-    val options = listOf("下载", "相册", "音乐")
-    var selectedOption by remember { mutableStateOf(options[0]) }
+    // 根据文件类型过滤可用选项
+    val allOptions = listOf("下载", "相册", "音乐")
+    val availableOptions = remember(file) {
+        if (isVideoFile(file.name)) {
+            allOptions // 视频文件显示所有选项
+        } else {
+            allOptions.filter { it != "相册" } // 非视频文件不显示相册选项
+        }
+    }
+
+    var selectedOption by remember { mutableStateOf(availableOptions.firstOrNull() ?: "下载") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -282,8 +292,16 @@ fun ExportDialog(
         text = {
             Column {
                 Text("请选择导出位置")
+                if (!isVideoFile(file.name)) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "注：只有视频文件才能导出到相册",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
-                options.forEach { option ->
+                availableOptions.forEach { option ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -311,7 +329,8 @@ fun ExportDialog(
             TextButton(
                 onClick = {
                     onExport(selectedOption)
-                }
+                },
+                enabled = selectedOption.isNotEmpty()
             ) {
                 Text("导出")
             }
@@ -338,6 +357,11 @@ fun saveToDownloads(context: Context, file: File): Boolean {
 
 // 保存到视频目录
 fun saveToPictures(context: Context, file: File): Boolean {
+    // 添加类型检查，确保只有视频文件才能保存到相册
+    if (!isVideoFile(file.name)) {
+        return false
+    }
+
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         saveUsingMediaStore(
             context = context,
@@ -462,11 +486,30 @@ fun getMimeType(fileName: String): String {
         fileName.endsWith(".avi") -> "video/x-msvideo"
         fileName.endsWith(".mkv") -> "video/x-matroska"
         fileName.endsWith(".mov") -> "video/quicktime"
+        fileName.endsWith(".wmv") -> "video/x-ms-wmv"
+        fileName.endsWith(".flv") -> "video/x-flv"
+        fileName.endsWith(".webm") -> "video/webm"
         fileName.endsWith(".mp3") -> "audio/mpeg"
         fileName.endsWith(".aac") -> "audio/aac"
         fileName.endsWith(".flac") -> "audio/flac"
         fileName.endsWith(".wav") -> "audio/wav"
         fileName.endsWith(".ogg") -> "audio/ogg"
+        fileName.endsWith(".m4a") -> "audio/mp4"
         else -> "*/*"
     }
+}
+
+// 判断是否为视频文件的辅助函数
+fun isVideoFile(fileName: String): Boolean {
+    return fileName.endsWith(".mp4") ||
+            fileName.endsWith(".avi") ||
+            fileName.endsWith(".mkv") ||
+            fileName.endsWith(".mov") ||
+            fileName.endsWith(".wmv") ||
+            fileName.endsWith(".flv") ||
+            fileName.endsWith(".m4v") ||
+            fileName.endsWith(".3gp") ||
+            fileName.endsWith(".webm") ||
+            fileName.endsWith(".mpg") ||
+            fileName.endsWith(".mpeg")
 }

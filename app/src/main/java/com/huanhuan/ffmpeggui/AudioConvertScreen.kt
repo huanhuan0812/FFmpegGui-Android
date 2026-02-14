@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,7 +53,15 @@ fun AudioConvertScreen(
     var showAdvancedOptions by remember { mutableStateOf(false) }
 
     val audioFormats = listOf("mp3", "aac", "flac", "wav", "ogg", "m4a")
-    val bitrates = listOf("128k", "192k", "256k", "320k")
+
+    // 根据选择的格式动态调整比特率选项
+    val bitrates = if (selectedOutputFormat == "ogg") {
+        // Opus 在低比特率表现更好，提供更精细的选项
+        listOf("64k", "96k", "128k", "160k", "192k")
+    } else {
+        listOf("128k", "192k", "256k", "320k")
+    }
+
     val sampleRates = listOf("22050", "44100", "48000")
     val channels = listOf("1", "2")
 
@@ -263,6 +272,10 @@ fun AudioConvertScreen(
                                             selectedBitrate = "192k"
                                             selectedSampleRate = "44100"
                                         }
+                                        "aac", "m4a" -> {
+                                            selectedBitrate = "192k"
+                                            selectedSampleRate = "44100"
+                                        }
                                         "flac" -> {
                                             selectedBitrate = ""
                                             selectedSampleRate = "48000"
@@ -270,6 +283,10 @@ fun AudioConvertScreen(
                                         "wav" -> {
                                             selectedBitrate = ""
                                             selectedSampleRate = "44100"
+                                        }
+                                        "ogg" -> {
+                                            selectedBitrate = "128k"  // Opus 推荐比特率
+                                            selectedSampleRate = "48000"  // Opus 最佳采样率
                                         }
                                     }
                                 },
@@ -368,6 +385,43 @@ fun AudioConvertScreen(
                                 )
                             }
                         }
+
+                        // Opus 特定选项（当选择 OGG 格式时显示）
+                        if (selectedOutputFormat == "ogg") {
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Text(
+                                text = "Opus 优化选项",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // 应用场景选择
+                            var selectedApplication by remember { mutableStateOf("audio") }
+                            val applications = listOf(
+                                "audio" to "音频 (高质量)",
+                                "lowdelay" to "低延迟 (实时通信)"
+                            )
+
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                applications.forEach { (value, label) ->
+                                    FilterChip(
+                                        selected = selectedApplication == value,
+                                        onClick = { selectedApplication = value },
+                                        label = { Text(label) },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+
+                            // 将选择的值传递给 ViewModel（可以在点击转换时处理）
+                        }
                     }
                 }
             }
@@ -403,10 +457,11 @@ fun AudioConvertScreen(
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         LinearProgressIndicator(
-                            progress = viewModel.progress.coerceIn(0f, 1f),
+                            progress = { viewModel.progress.coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth(),
                             color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.primaryContainer
+                            trackColor = MaterialTheme.colorScheme.primaryContainer,
+                            strokeCap = ProgressIndicatorDefaults.LinearStrokeCap,
                         )
                         if (viewModel.currentCommand.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(8.dp))
@@ -446,6 +501,9 @@ fun AudioConvertScreen(
                     // 构建设置字符串用于显示
                     val settings = buildString {
                         append("格式: ${selectedOutputFormat.uppercase()}")
+                        if (selectedOutputFormat == "ogg") {
+                            append(" (Opus编码)")
+                        }
                         if (selectedBitrate.isNotBlank() && selectedOutputFormat in listOf("mp3", "aac", "m4a", "ogg")) {
                             append(", 比特率: $selectedBitrate")
                         }

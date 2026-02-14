@@ -15,3 +15,6 @@
 local.properties
 .idea/
 .kotlin/
+/.version
+/build.sh
+/app/ffmpegapp.jks

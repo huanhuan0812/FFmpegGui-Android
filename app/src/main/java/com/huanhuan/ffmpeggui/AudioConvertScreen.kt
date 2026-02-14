@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -313,7 +314,11 @@ fun AudioConvertScreen(
 
                     // 高级选项
                     if (showAdvancedOptions) {
-                        Divider(modifier = Modifier.padding(vertical = 8.dp))
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            thickness = DividerDefaults.Thickness,
+                            color = DividerDefaults.color
+                        )
 
                         // 比特率设置（仅对部分格式有效）
                         if (selectedOutputFormat in listOf("mp3", "aac", "m4a", "ogg")) {

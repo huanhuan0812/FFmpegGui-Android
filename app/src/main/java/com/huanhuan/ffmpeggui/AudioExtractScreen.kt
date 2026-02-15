@@ -35,6 +35,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -239,8 +240,11 @@ fun AudioExtractScreen(
                         modifier = Modifier.padding(16.dp)
                     ) {
                         LinearProgressIndicator(
-                            progress = viewModel.progress,
-                            modifier = Modifier.fillMaxWidth()
+                            progress = { viewModel.progress },
+                            modifier = Modifier.fillMaxWidth(),
+                            color = ProgressIndicatorDefaults.linearColor,
+                            trackColor = ProgressIndicatorDefaults.linearTrackColor,
+                            strokeCap = ProgressIndicatorDefaults.LinearStrokeCap,
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(

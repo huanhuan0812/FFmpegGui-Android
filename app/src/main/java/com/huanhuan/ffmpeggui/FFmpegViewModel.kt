@@ -552,6 +552,8 @@ class FFmpegViewModel : ViewModel() {
     }
 
     // 也可以添加一个便捷方法
+    // 在 FFmpegViewModel.kt 中替换原有的 convertImage 方法
+
     fun convertImage(
         inputPath: String,
         outputPath: String,
@@ -560,11 +562,16 @@ class FFmpegViewModel : ViewModel() {
         width: Int = 0,
         height: Int = 0,
         maintainAspectRatio: Boolean = true,
+        compressionLevel: Int = 6,  // 用于 PNG 压缩级别 0-9
+        dither: Boolean = true,      // 用于 GIF 抖动
+        colors: Int = 256,           // 用于 GIF 颜色数
+        lossless: Boolean = false,   // 用于 WebP 无损模式
         onComplete: (Boolean, String) -> Unit
     ) {
         val command = buildString {
             append("-i \"$inputPath\" -y")
 
+            // 尺寸调整
             if (width > 0 || height > 0) {
                 append(" -vf ")
                 when {
@@ -580,14 +587,131 @@ class FFmpegViewModel : ViewModel() {
                 }
             }
 
+            // 格式特定参数
             when (format.lowercase(Locale.getDefault())) {
-                "jpg", "jpeg" -> append(" -q:v ${(100 - quality) / 2}")
-                "webp" -> append(" -quality $quality")
+                "jpg", "jpeg" -> {
+                    // JPEG: 质量 2-31 (2最好,31最差)
+                    val jpegQuality = ((100 - quality) / 2).coerceIn(2, 31)
+                    append(" -q:v $jpegQuality")
+                    // 使用优化的Huffman编码
+                    append(" -huffman optimal")
+                }
+
                 "png" -> {
-                    if (quality < 100) {
-                        val compression = (9 * (100 - quality) / 100)
-                        append(" -compression_level $compression")
+                    // PNG: 压缩级别 0-9 (0=无压缩, 9=最大压缩)
+                    val pngCompression = compressionLevel.coerceIn(0, 9)
+                    append(" -compression_level $pngCompression")
+                    // 使用预测器提高压缩率
+                    append(" -pred mixed")
+                }
+
+                "webp" -> {
+                    if (lossless) {
+                        // 无损WebP
+                        append(" -lossless 1 -quality $quality")
+                        // 压缩方法 0-6 (6最慢但压缩率最高)
+                        append(" -method 6")
+                    } else {
+                        // 有损WebP
+                        append(" -quality $quality")
+                        // 锐化边缘
+                        append(" -sharp_yuv 1")
                     }
+                }
+
+                "bmp" -> {
+                    // BMP: 无压缩选项，但可以指定色彩深度
+                    append(" -pix_fmt bgr24")
+                }
+
+                "gif" -> {
+                    // GIF 特定参数
+                    val paletteGenCmd = if (dither) {
+                        // 使用抖动的调色板
+                        "palettegen=stats_mode=single"
+                    } else {
+                        "palettegen=stats_mode=single:max_colors=$colors"
+                    }
+
+                    // 先处理输入，然后应用调色板
+                    val filterComplex = if (width > 0 || height > 0) {
+                        // 如果已经有尺寸调整，需要组合滤镜
+                        val scale = when {
+                            width > 0 && height > 0 -> "scale=$width:$height"
+                            width > 0 -> "scale=$width:-2"
+                            height > 0 -> "scale=-2:$height"
+                            else -> "scale=iw:ih"
+                        }
+                        "\"${scale}[s];[s]${paletteGenCmd}[p];[s][p]paletteuse${if (dither) "" else "=dither=none"}\""
+                    } else {
+                        "\"[0:v]${paletteGenCmd}[p];[0:v][p]paletteuse${if (dither) "" else "=dither=none"}\""
+                    }
+
+                    append(" -filter_complex $filterComplex")
+                    append(" -map \"[out]\"")
+                }
+
+                "tiff" -> {
+                    // TIFF: 压缩选项
+                    append(" -compression_algo lzw")  // lzw, zip, jpeg, none
+                    append(" -pix_fmt rgb24")
+                }
+
+                "ico" -> {
+                    // ICO: 可以包含多个尺寸
+                    if (width == 0 || height == 0) {
+                        // 默认创建多个常见尺寸
+                        append(" -vf \"scale=16:16,scale=32:32,scale=48:48,scale=64:64,scale=128:128,scale=256:256\"")
+                    }
+                }
+
+                "heif", "heic" -> {
+                    // HEIF: 高效图像格式
+                    append(" -c:v libheif")
+                    append(" -quality $quality")
+                    if (lossless) {
+                        append(" -lossless 1")
+                    }
+                }
+
+                "avif" -> {
+                    // AVIF: AV1图像格式
+                    append(" -c:v libaom-av1")
+                    append(" -crf ${63 - (quality * 63 / 100)}")  // 0-63, 0最好
+                    append(" -b:v 0")
+                    append(" -strict experimental")
+                }
+
+                "jp2", "j2k" -> {
+                    // JPEG2000
+                    append(" -c:v jpeg2000")
+                    append(" -quality $quality")
+                    if (lossless) {
+                        append(" -pred 1")  // 无损预测
+                    }
+                }
+
+                "pdf" -> {
+                    // PDF 输出
+                    append(" -c:v pdf")
+                    append(" -pix_fmt rgb24")
+                }
+
+                "psd" -> {
+                    // Photoshop 文档
+                    append(" -c:v psd")
+                    append(" -pix_fmt rgba")
+                }
+
+                "tga" -> {
+                    // Targa
+                    append(" -c:v targa")
+                    append(" -pix_fmt bgra")
+                }
+
+                "pcx", "pict", "pnm", "pgm", "ppm", "pbm" -> {
+                    // 其他格式使用默认编码器
+                    // 这些格式通常不需要特殊参数
                 }
             }
 
@@ -600,6 +724,26 @@ class FFmpegViewModel : ViewModel() {
             type = "图片转换 - ${format.uppercase(Locale.getDefault())}",
             inputPath = inputPath,
             outputPath = outputPath,
+            onComplete = onComplete
+        )
+    }
+
+    // 添加一个简化的图片转换方法
+    fun convertImageSimple(
+        inputPath: String,
+        outputPath: String,
+        format: String,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        // 简单转换，使用默认参数
+        convertImage(
+            inputPath = inputPath,
+            outputPath = outputPath,
+            format = format,
+            quality = 90,
+            width = 0,
+            height = 0,
+            maintainAspectRatio = true,
             onComplete = onComplete
         )
     }

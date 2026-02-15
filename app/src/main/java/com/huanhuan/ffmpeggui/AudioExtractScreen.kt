@@ -72,9 +72,8 @@ fun AudioExtractScreen(
     var outputFileName by remember { mutableStateOf("") }
     var selectedAudioFormat by remember { mutableStateOf("mp3") }
     val audioFormats = listOf("mp3", "aac", "flac", "wav", "ogg")
-    val scrollState = rememberScrollState() // 添加滚动状态
+    val scrollState = rememberScrollState()
 
-    // 添加一个状态来跟踪屏幕是否仍然活动
     var isScreenActive by remember { mutableStateOf(true) }
 
     DisposableEffect(lifecycleOwner) {
@@ -112,7 +111,9 @@ fun AudioExtractScreen(
             permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
         } else {
             permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-            permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
         }
 
         val missingPermissions = permissions.filter {
@@ -127,12 +128,7 @@ fun AudioExtractScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("音频提取") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                }
+                title = { Text("音频提取") }
             )
         }
     ) { paddingValues ->
@@ -140,11 +136,10 @@ fun AudioExtractScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .verticalScroll(scrollState) // 添加垂直滚动
+                .verticalScroll(scrollState)
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 文件选择
             OutlinedCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -172,7 +167,7 @@ fun AudioExtractScreen(
                             text = File(selectedVideoPath!!).name,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,
-                            maxLines = 2 // 限制行数，防止文件名过长
+                            maxLines = 2
                         )
                     }
                 }
@@ -180,7 +175,6 @@ fun AudioExtractScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 输出设置
             OutlinedCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -208,7 +202,6 @@ fun AudioExtractScreen(
                         style = MaterialTheme.typography.bodyMedium
                     )
 
-                    // 使用 FlowRow 让格式标签在需要时自动换行
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -228,7 +221,6 @@ fun AudioExtractScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 处理状态
             if (viewModel.isProcessing) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -257,7 +249,6 @@ fun AudioExtractScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // 开始转换按钮
             Button(
                 onClick = {
                     if (selectedVideoPath == null) {
@@ -282,9 +273,7 @@ fun AudioExtractScreen(
                         inputPath = selectedVideoPath!!,
                         outputPath = outputFile.absolutePath
                     ) { success, message ->
-                        // 检查屏幕是否仍然活跃
                         if (!isScreenActive) {
-                            // 屏幕已销毁，只显示通知
                             if (success) {
                                 Toast.makeText(context, "音频提取完成: ${outputFile.name}", Toast.LENGTH_LONG).show()
                             } else {
@@ -293,14 +282,10 @@ fun AudioExtractScreen(
                             return@extractAudio
                         }
 
-                        // 屏幕仍然活跃，正常处理
                         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                         if (success) {
-                            // 使用协程延迟一小段时间确保导航安全
                             navController.navigate("result/${Uri.encode(outputFile.absolutePath)}") {
-                                // 避免重复导航
                                 launchSingleTop = true
-                                // 清除可能存在的旧目标
                                 popUpTo("audio_extract") {
                                     inclusive = false
                                 }
@@ -327,7 +312,6 @@ fun AudioExtractScreen(
                 }
             }
 
-            // 添加底部间距，确保滚动时最后一个元素不会被底部导航栏遮挡
             Spacer(modifier = Modifier.height(16.dp))
         }
     }

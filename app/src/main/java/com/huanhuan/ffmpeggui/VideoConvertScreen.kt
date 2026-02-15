@@ -13,6 +13,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -135,11 +137,6 @@ fun VideoConvertScreen(
         topBar = {
             TopAppBar(
                 title = { Text("视频格式转换") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                }
             )
         }
     ) { paddingValues ->
@@ -337,7 +334,11 @@ fun VideoConvertScreen(
 
                     // 高级选项
                     if (showAdvancedOptions) {
-                        Divider(modifier = Modifier.padding(vertical = 8.dp))
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            thickness = DividerDefaults.Thickness,
+                            color = DividerDefaults.color
+                        )
 
                         // 分辨率
                         Text(
@@ -468,10 +469,11 @@ fun VideoConvertScreen(
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         LinearProgressIndicator(
-                            progress = viewModel.progress.coerceIn(0f, 1f),
+                            progress = { viewModel.progress.coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth(),
                             color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.primaryContainer
+                            trackColor = MaterialTheme.colorScheme.primaryContainer,
+                            strokeCap = ProgressIndicatorDefaults.LinearStrokeCap,
                         )
                         if (viewModel.currentCommand.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(8.dp))

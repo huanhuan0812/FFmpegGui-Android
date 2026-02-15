@@ -20,9 +20,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -63,6 +62,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+// 在 ImageConvertScreen.kt 中修改和添加
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImageConvertScreen(
@@ -81,7 +82,22 @@ fun ImageConvertScreen(
     var resizeHeight by remember { mutableIntStateOf(0) }
     var maintainAspectRatio by remember { mutableStateOf(true) }
 
-    val imageFormats = listOf("jpg", "png", "webp", "bmp", "gif", "tiff")
+    // 新增高级选项状态
+    var showAdvancedOptions by remember { mutableStateOf(false) }
+    var compressionLevel by remember { mutableFloatStateOf(6f) }  // PNG压缩
+    var losslessWebP by remember { mutableStateOf(false) }        // WebP无损
+    var gifDither by remember { mutableStateOf(true) }            // GIF抖动
+    var gifColors by remember { mutableFloatStateOf(256f) }       // GIF颜色数
+    var selectedCategory by remember { mutableStateOf("常用") }    // 格式分类
+
+    // 扩展图片格式列表，按分类组织
+    val imageFormatCategories = mapOf(
+        "常用" to listOf("jpg", "png", "webp", "gif"),
+        "专业" to listOf("tiff", "bmp", "tga", "pcx"),
+        "现代" to listOf("avif", "heif", "jp2", "webp"),
+        "其他" to listOf("ico", "psd", "pdf", "pict", "pnm", "dds")
+    )
+
     val scrollState = rememberScrollState()
 
     // 添加一个状态来跟踪屏幕是否仍然活动
@@ -93,6 +109,7 @@ fun ImageConvertScreen(
         }
     }
 
+    // 权限处理代码保持不变...
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -121,7 +138,9 @@ fun ImageConvertScreen(
             permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
         } else {
             permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-            permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
         }
 
         val missingPermissions = permissions.filter {
@@ -139,7 +158,7 @@ fun ImageConvertScreen(
                 title = { Text("图片格式转换") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -153,7 +172,7 @@ fun ImageConvertScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 文件选择
+            // 文件选择卡片（保持不变）
             OutlinedCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -184,12 +203,11 @@ fun ImageConvertScreen(
                             maxLines = 2
                         )
 
-                        // 显示图片信息
                         val file = File(selectedImagePath!!)
-                        val fileSize = file.length() / 1024 // KB
+                        val fileSize = file.length() / 1024
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "大小: ${fileSize} KB",
+                            text = "大小: ${fileSize} KB | 格式: ${file.extension.uppercase()}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -199,7 +217,7 @@ fun ImageConvertScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 输出设置
+            // 输出设置卡片
             OutlinedCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -222,18 +240,40 @@ fun ImageConvertScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    // 格式分类标签
                     Text(
-                        text = "输出格式",
+                        text = "格式分类",
                         style = MaterialTheme.typography.bodyMedium
                     )
 
-                    // 格式选择
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        imageFormats.forEach { format ->
+                        imageFormatCategories.keys.forEach { category ->
+                            FilterChip(
+                                selected = selectedCategory == category,
+                                onClick = { selectedCategory = category },
+                                label = { Text(category) }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "输出格式",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    // 根据选中的分类显示格式
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        imageFormatCategories[selectedCategory]?.forEach { format ->
                             FilterChip(
                                 selected = selectedOutputFormat == format,
                                 onClick = { selectedOutputFormat = format },
@@ -245,26 +285,28 @@ fun ImageConvertScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // 质量设置（仅对有损格式）
-                    if (selectedOutputFormat in listOf("jpg", "webp")) {
-                        Text(
-                            text = "图片质量: ${quality.toInt()}%",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Slider(
-                            value = quality,
-                            onValueChange = { quality = it },
-                            valueRange = 1f..100f,
-                            steps = 98,
-                            colors = SliderDefaults.colors(
-                                thumbColor = MaterialTheme.colorScheme.primary,
-                                activeTrackColor = MaterialTheme.colorScheme.primary
+                    // 基本质量设置
+                    when (selectedOutputFormat) {
+                        "jpg", "jpeg", "webp", "avif", "heif", "jp2" -> {
+                            Text(
+                                text = "图片质量: ${quality.toInt()}%",
+                                style = MaterialTheme.typography.bodyMedium
                             )
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
+                            Slider(
+                                value = quality,
+                                onValueChange = { quality = it },
+                                valueRange = 1f..100f,
+                                steps = 98,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = MaterialTheme.colorScheme.primary,
+                                    activeTrackColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
                     }
 
-                    // 尺寸调整选项
+                    // 尺寸调整选项（保持不变）
                     Text(
                         text = "尺寸调整",
                         style = MaterialTheme.typography.titleSmall
@@ -297,7 +339,6 @@ fun ImageConvertScreen(
                         )
                     }
 
-                    // 保持宽高比选项
                     FilterChip(
                         selected = maintainAspectRatio,
                         onClick = { maintainAspectRatio = !maintainAspectRatio },
@@ -311,12 +352,72 @@ fun ImageConvertScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp)
                     )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 高级选项切换
+                    Button(
+                        onClick = { showAdvancedOptions = !showAdvancedOptions },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (showAdvancedOptions) "隐藏高级选项" else "显示高级选项")
+                    }
+
+                    // 高级选项面板
+                    if (showAdvancedOptions) {
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // PNG 压缩设置
+                        if (selectedOutputFormat == "png") {
+                            Text(
+                                text = "PNG 压缩级别: ${compressionLevel.toInt()} (0=无压缩, 9=最大压缩)",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Slider(
+                                value = compressionLevel,
+                                onValueChange = { compressionLevel = it },
+                                valueRange = 0f..9f,
+                                steps = 9
+                            )
+                        }
+
+                        // WebP 无损选项
+                        if (selectedOutputFormat == "webp") {
+                            FilterChip(
+                                selected = losslessWebP,
+                                onClick = { losslessWebP = !losslessWebP },
+                                label = { Text("无损模式") }
+                            )
+                        }
+
+                        // GIF 高级选项
+                        if (selectedOutputFormat == "gif") {
+                            FilterChip(
+                                selected = gifDither,
+                                onClick = { gifDither = !gifDither },
+                                label = { Text("使用抖动") }
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = "颜色数: ${gifColors.toInt()}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Slider(
+                                value = gifColors,
+                                onValueChange = { gifColors = it },
+                                valueRange = 2f..256f,
+                                steps = 254
+                            )
+                        }
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 处理状态
+            // 处理状态显示（保持不变）
             if (viewModel.isProcessing) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -366,30 +467,26 @@ fun ImageConvertScreen(
 
                     val outputFile = File(outputDir, "${outputFileName}_${timestamp}.${selectedOutputFormat}")
 
-                    // 构建FFmpeg命令
-                    val command = buildImageConvertCommand(
+                    viewModel.convertImage(
                         inputPath = selectedImagePath!!,
                         outputPath = outputFile.absolutePath,
                         format = selectedOutputFormat,
-                        quality = quality,
+                        quality = quality.toInt(),
                         width = resizeWidth,
                         height = resizeHeight,
-                        maintainAspectRatio = maintainAspectRatio
-                    )
-
-                    viewModel.executeImageConvert(
-                        inputPath = selectedImagePath!!,
-                        outputPath = outputFile.absolutePath,
-                        command = command,
+                        maintainAspectRatio = maintainAspectRatio,
+                        compressionLevel = compressionLevel.toInt(),
+                        dither = gifDither,
+                        colors = gifColors.toInt(),
+                        lossless = losslessWebP,
                         onComplete = { success, message ->
-                            // 检查屏幕是否仍然活跃
                             if (!isScreenActive) {
                                 if (success) {
                                     Toast.makeText(context, "图片转换完成: ${outputFile.name}", Toast.LENGTH_LONG).show()
                                 } else {
                                     Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                                 }
-                                return@executeImageConvert
+                                return@convertImage
                             }
 
                             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
@@ -424,68 +521,40 @@ fun ImageConvertScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-        }
-    }
-}
 
-// 构建图片转换命令
-private fun buildImageConvertCommand(
-    inputPath: String,
-    outputPath: String,
-    format: String,
-    quality: Float,
-    width: Int,
-    height: Int,
-    maintainAspectRatio: Boolean
-): String {
-    val commandList = mutableListOf(
-        "-i", inputPath,
-        "-y"  // 覆盖输出文件
-    )
-
-    // 添加尺寸调整参数
-    if (width > 0 || height > 0) {
-        val scaleFilter = buildString {
-            append("scale=")
-            when {
-                width > 0 && height > 0 -> {
-                    if (maintainAspectRatio) {
-                        append("'if(gt(a,$width/$height),$width,-2)':'if(gt(a,$width/$height),-2,$height)'")
-                    } else {
-                        append("$width:$height")
-                    }
+            // 格式说明
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp)
+                ) {
+                    Text(
+                        text = "格式说明",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = when (selectedOutputFormat) {
+                            "jpg" -> "JPEG: 有损压缩，适合照片，文件小"
+                            "png" -> "PNG: 无损压缩，支持透明，适合图标和截图"
+                            "webp" -> "WebP: 现代格式，支持有损/无损，文件更小"
+                            "gif" -> "GIF: 支持动画，颜色有限，适合简单动画"
+                            "bmp" -> "BMP: 无压缩，文件大，Windows位图"
+                            "tiff" -> "TIFF: 灵活格式，支持多种压缩，适合打印"
+                            "avif" -> "AVIF: AV1图像格式，压缩率极高"
+                            "heif" -> "HEIF: 高效图像格式，iPhone常用"
+                            "jp2" -> "JPEG2000: 支持无损/有损，渐进传输"
+                            "ico" -> "ICO: Windows图标格式"
+                            "psd" -> "PSD: Photoshop源文件格式"
+                            "pdf" -> "PDF: 便携文档格式"
+                            else -> "点击查看格式说明"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                width > 0 -> append("$width:-2")
-                height > 0 -> append("-2:$height")
             }
         }
-        commandList.add("-vf")
-        commandList.add(scaleFilter)
-    }
-
-    // 添加质量参数（对于有损格式）
-    when (format.lowercase(Locale.getDefault())) {
-        "jpg", "jpeg" -> {
-            commandList.add("-q:v")
-            commandList.add(((100 - quality) / 2).toInt().toString()) // q:v 范围 2-31，2最好，31最差
-        }
-        "webp" -> {
-            commandList.add("-quality")
-            commandList.add(quality.toInt().toString())
-        }
-        "png" -> {
-            if (quality < 100) {
-                commandList.add("-compression_level")
-                commandList.add(((9 * (100 - quality) / 100)).toInt().toString()) // 0-9，9最高压缩
-            }
-        }
-    }
-
-    // 添加输出路径
-    commandList.add(outputPath)
-
-    // 将命令列表转换为字符串
-    return commandList.joinToString(" ") {
-        if (it.contains(" ") && !it.startsWith("'") && !it.endsWith("'")) "\"$it\"" else it
     }
 }

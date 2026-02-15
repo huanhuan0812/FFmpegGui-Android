@@ -279,8 +279,12 @@ fun ExportDialog(
     val availableOptions = remember(file) {
         if (isVideoFile(file.name)) {
             allOptions // 视频文件显示所有选项
+        } else if (isImageFile(file.name)) {
+            allOptions.filter { it == "相册" || it == "下载" } // 图片文件显示相册和下载
+        } else if (isAudioFile(file.name)) {
+            allOptions.filter { it == "音乐" || it == "下载" } // 音频文件显示音乐和下载
         } else {
-            allOptions.filter { it != "相册" } // 非视频文件不显示相册选项
+            listOf("下载") // 其他文件只显示下载
         }
     }
 
@@ -292,10 +296,10 @@ fun ExportDialog(
         text = {
             Column {
                 Text("请选择导出位置")
-                if (!isVideoFile(file.name)) {
+                if (!isVideoFile(file.name) && !isImageFile(file.name)) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "注：只有视频文件才能导出到相册",
+                        text = "注：只有视频和图片文件才能导出到相册",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -355,18 +359,25 @@ fun saveToDownloads(context: Context, file: File): Boolean {
     }
 }
 
-// 保存到视频目录
+// 保存到相册（图片和视频）
 fun saveToPictures(context: Context, file: File): Boolean {
-    // 添加类型检查，确保只有视频文件才能保存到相册
-    if (!isVideoFile(file.name)) {
+    // 检查文件类型：视频或图片
+    if (!isVideoFile(file.name) && !isImageFile(file.name)) {
         return false
     }
 
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        // Android 10+ 根据文件类型选择不同的 MediaStore 集合
+        val collection = if (isVideoFile(file.name)) {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        } else {
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        }
+
         saveUsingMediaStore(
             context = context,
             file = file,
-            collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+            collection = collection,
             relativePath = Environment.DIRECTORY_PICTURES
         )
     } else {
@@ -379,6 +390,11 @@ fun saveToPictures(context: Context, file: File): Boolean {
 
 // 保存到音乐目录
 fun saveToMusic(context: Context, file: File): Boolean {
+    // 检查文件类型：仅音频文件才能保存到音乐目录
+    if (!isAudioFile(file.name)) {
+        return false
+    }
+
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         saveUsingMediaStore(
             context = context,
@@ -406,6 +422,12 @@ private fun saveUsingMediaStore(
             put(MediaStore.MediaColumns.DISPLAY_NAME, file.name)
             put(MediaStore.MediaColumns.MIME_TYPE, getMimeType(file.name))
             put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+
+            // 如果是图片或视频，添加日期信息
+            if (isImageFile(file.name) || isVideoFile(file.name)) {
+                put(MediaStore.MediaColumns.DATE_ADDED, System.currentTimeMillis() / 1000)
+                put(MediaStore.MediaColumns.DATE_MODIFIED, System.currentTimeMillis() / 1000)
+            }
         }
 
         val uri = context.contentResolver.insert(collection, contentValues)
@@ -482,6 +504,16 @@ fun formatDate(timestamp: Long): String {
 
 fun getMimeType(fileName: String): String {
     return when {
+        // 图片格式
+        fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") -> "image/jpeg"
+        fileName.endsWith(".png") -> "image/png"
+        fileName.endsWith(".gif") -> "image/gif"
+        fileName.endsWith(".bmp") -> "image/bmp"
+        fileName.endsWith(".webp") -> "image/webp"
+        fileName.endsWith(".svg") -> "image/svg+xml"
+        fileName.endsWith(".heic") -> "image/heic"
+
+        // 视频格式
         fileName.endsWith(".mp4") -> "video/mp4"
         fileName.endsWith(".avi") -> "video/x-msvideo"
         fileName.endsWith(".mkv") -> "video/x-matroska"
@@ -489,17 +521,24 @@ fun getMimeType(fileName: String): String {
         fileName.endsWith(".wmv") -> "video/x-ms-wmv"
         fileName.endsWith(".flv") -> "video/x-flv"
         fileName.endsWith(".webm") -> "video/webm"
+        fileName.endsWith(".m4v") -> "video/x-m4v"
+        fileName.endsWith(".3gp") -> "video/3gpp"
+        fileName.endsWith(".mpg") || fileName.endsWith(".mpeg") -> "video/mpeg"
+
+        // 音频格式
         fileName.endsWith(".mp3") -> "audio/mpeg"
         fileName.endsWith(".aac") -> "audio/aac"
         fileName.endsWith(".flac") -> "audio/flac"
         fileName.endsWith(".wav") -> "audio/wav"
         fileName.endsWith(".ogg") -> "audio/ogg"
         fileName.endsWith(".m4a") -> "audio/mp4"
+        fileName.endsWith(".opus") -> "audio/opus"
+
         else -> "*/*"
     }
 }
 
-// 判断是否为视频文件的辅助函数
+// 判断是否为视频文件
 fun isVideoFile(fileName: String): Boolean {
     return fileName.endsWith(".mp4") ||
             fileName.endsWith(".avi") ||
@@ -512,4 +551,27 @@ fun isVideoFile(fileName: String): Boolean {
             fileName.endsWith(".webm") ||
             fileName.endsWith(".mpg") ||
             fileName.endsWith(".mpeg")
+}
+
+// 判断是否为图片文件
+fun isImageFile(fileName: String): Boolean {
+    return fileName.endsWith(".jpg") ||
+            fileName.endsWith(".jpeg") ||
+            fileName.endsWith(".png") ||
+            fileName.endsWith(".gif") ||
+            fileName.endsWith(".bmp") ||
+            fileName.endsWith(".webp") ||
+            fileName.endsWith(".svg") ||
+            fileName.endsWith(".heic")
+}
+
+// 判断是否为音频文件
+fun isAudioFile(fileName: String): Boolean {
+    return fileName.endsWith(".mp3") ||
+            fileName.endsWith(".aac") ||
+            fileName.endsWith(".flac") ||
+            fileName.endsWith(".wav") ||
+            fileName.endsWith(".ogg") ||
+            fileName.endsWith(".m4a") ||
+            fileName.endsWith(".opus")
 }

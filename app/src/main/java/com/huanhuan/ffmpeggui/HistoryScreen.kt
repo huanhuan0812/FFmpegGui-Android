@@ -39,11 +39,6 @@ fun HistoryScreen(
         topBar = {
             TopAppBar(
                 title = { Text("历史记录") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
                 actions = {
                     if (viewModel.historyTasks.isNotEmpty()) {
                         // 清空已完成文件按钮

@@ -180,11 +180,6 @@ fun AudioConvertScreen(
         topBar = {
             TopAppBar(
                 title = { Text("音频格式转换") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                }
             )
         }
     ) { paddingValues ->

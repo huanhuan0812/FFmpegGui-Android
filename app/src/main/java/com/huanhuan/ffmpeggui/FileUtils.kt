@@ -54,16 +54,3 @@ fun getFileName(context: Context, uri: Uri): String? {
 
     return name
 }
-
-fun getMimeTypeFromUri(context: Context, uri: Uri): String? {
-    return when (uri.scheme) {
-        ContentResolver.SCHEME_CONTENT -> {
-            context.contentResolver.getType(uri)
-        }
-        ContentResolver.SCHEME_FILE -> {
-            val extension = MimeTypeMap.getFileExtensionFromUrl(uri.toString())
-            MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.lowercase())
-        }
-        else -> null
-    }
-}

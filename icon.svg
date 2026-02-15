@@ -3,10 +3,10 @@
   <rect width="192" height="192" rx="48" fill="white" />
   
   <!-- 极浅灰半透明圆，增加层次感（非常 subtle） -->
-  <circle cx="96" cy="96" r="64" fill="#6200EE" fill-opacity="0.04" />
+  <circle cx="96" cy="92" r="64" fill="#6200EE" fill-opacity="0.04" />
   
-  <!-- 主体胶片/方格符号：全部改为紫色调 -->
-  <g transform="translate(56, 56)">
+  <!-- 主体胶片/方格符号：全部改为紫色调，并整体上移8px (原translate(56,56) 改为 56,48) 使重心位于中心 -->
+  <g transform="translate(56, 48)">
     <!-- 外框：方形胶片轮廓，紫色 -->
     <rect x="0" y="0" width="80" height="80" rx="16" fill="#6200EE" />
     
@@ -18,7 +18,7 @@
     
   </g>
   
-  <!-- 底部"FFmpeg"文字，深灰色，保持可读性且不刺眼 -->
+  <!-- 底部"FFmpeg"文字，深灰色，保持可读性且不刺眼，位置保持不变 -->
   <text x="96" y="155" font-family="Inter, 'Segoe UI', Roboto, system-ui, sans-serif" font-size="20" font-weight="500" fill="#1E1E1E" text-anchor="middle" letter-spacing="1">FFmpeg</text>
   
   <!-- 极淡的投影层，增加立体感（非常轻微） -->

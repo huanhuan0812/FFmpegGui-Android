@@ -551,9 +551,6 @@ class FFmpegViewModel : ViewModel() {
         )
     }
 
-    // 也可以添加一个便捷方法
-    // 在 FFmpegViewModel.kt 中替换原有的 convertImage 方法
-
     fun convertImage(
         inputPath: String,
         outputPath: String,

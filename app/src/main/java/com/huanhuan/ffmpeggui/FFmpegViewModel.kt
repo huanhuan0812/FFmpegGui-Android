@@ -533,4 +533,74 @@ class FFmpegViewModel : ViewModel() {
         com.arthenica.ffmpegkit.FFmpegKitConfig.enableStatisticsCallback(null)
         com.arthenica.ffmpegkit.FFmpegKitConfig.enableLogCallback(null)
     }
+
+    // 在 FFmpegViewModel 类中添加
+    fun executeImageConvert(
+        inputPath: String,
+        outputPath: String,
+        command: String,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        executeFFmpegCommand(
+            command = command,
+            taskId = UUID.randomUUID().toString(),
+            type = "图片转换",
+            inputPath = inputPath,
+            outputPath = outputPath,
+            onComplete = onComplete
+        )
+    }
+
+    // 也可以添加一个便捷方法
+    fun convertImage(
+        inputPath: String,
+        outputPath: String,
+        format: String,
+        quality: Int = 90,
+        width: Int = 0,
+        height: Int = 0,
+        maintainAspectRatio: Boolean = true,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        val command = buildString {
+            append("-i \"$inputPath\" -y")
+
+            if (width > 0 || height > 0) {
+                append(" -vf ")
+                when {
+                    width > 0 && height > 0 -> {
+                        if (maintainAspectRatio) {
+                            append("\"scale='if(gt(a,$width/$height),$width,-2)':'if(gt(a,$width/$height),-2,$height)'\"")
+                        } else {
+                            append("\"scale=$width:$height\"")
+                        }
+                    }
+                    width > 0 -> append("\"scale=$width:-2\"")
+                    true -> append("\"scale=-2:$height\"")
+                }
+            }
+
+            when (format.lowercase(Locale.getDefault())) {
+                "jpg", "jpeg" -> append(" -q:v ${(100 - quality) / 2}")
+                "webp" -> append(" -quality $quality")
+                "png" -> {
+                    if (quality < 100) {
+                        val compression = (9 * (100 - quality) / 100)
+                        append(" -compression_level $compression")
+                    }
+                }
+            }
+
+            append(" \"$outputPath\"")
+        }
+
+        executeFFmpegCommand(
+            command = command,
+            taskId = UUID.randomUUID().toString(),
+            type = "图片转换 - ${format.uppercase(Locale.getDefault())}",
+            inputPath = inputPath,
+            outputPath = outputPath,
+            onComplete = onComplete
+        )
+    }
 }

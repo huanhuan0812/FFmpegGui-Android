@@ -4,46 +4,42 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.outlined.Audiotrack
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.VideoLibrary
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.huanhuan.ffmpeggui.ui.theme.FFmpegGuiTheme
 
 class MainActivity : ComponentActivity() {
@@ -62,230 +58,121 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Preview
 @Composable
 fun FFmpegApp() {
     val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
 
-    NavHost(navController = navController, startDestination = "main") {
-        composable("main") {
-            MainScreen(
-                onNavigateToAudioExtract = { navController.navigate("audio_extract") },
-                onNavigateToAudioConvert = { navController.navigate("audio_convert") },
-                onNavigateToVideoConvert = { navController.navigate("video_convert") },
-                onNavigateToHistory = { navController.navigate("history") },
-                onNavigateToAbout = { navController.navigate("about") }
-            )
-        }
-        composable("audio_extract") {
-            AudioExtractScreen(
-                navController = navController,
-                onBack = { navController.popBackStack() }
-            )
-        }
-        composable("audio_convert") {
-            AudioConvertScreen(
-                navController = navController,
-                onBack = { navController.popBackStack() }
-            )
-        }
-        composable("video_convert") {
-            VideoConvertScreen(
-                navController = navController,
-                onBack = { navController.popBackStack() }
-            )
-        }
-        composable("history") {
-            HistoryScreen(
-                onBack = { navController.popBackStack() },
-                onNavigateToResult = { outputPath ->
-                    // 对输出路径进行编码，确保特殊字符能正确处理
-                    val encodedPath = Uri.encode(outputPath, "/")
-                    navController.navigate("result/$encodedPath")
-                }
-            )
-        }
-        composable("about") {
-            AboutScreen(
-                onBack = { navController.popBackStack() }
-            )
-        }
-        composable(
-            "result/{outputPath}",
-            arguments = listOf(navArgument("outputPath") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val outputPath = backStackEntry.arguments?.getString("outputPath") ?: ""
-            ResultScreen(
-                outputPath = outputPath,
-                onBack = { navController.popBackStack() },
-                onNewTask = { navController.popBackStack("main", false) }
-            )
-        }
-    }
-}
+    // 创建ViewModel实例
+    val viewModel: FFmpegViewModel = viewModel()
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MainScreen(
-    onNavigateToAudioExtract: () -> Unit,
-    onNavigateToAudioConvert: () -> Unit,
-    onNavigateToVideoConvert: () -> Unit,
-    onNavigateToHistory: () -> Unit,
-    onNavigateToAbout: () -> Unit
-) {
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("FFmpeg GUI工具") },
-                actions = {
-                    IconButton(onClick = onNavigateToAbout) {
-                        Icon(Icons.Default.Info, contentDescription = "关于")
-                    }
+        bottomBar = {
+            // 底部导航栏
+            NavigationBar {
+                val tabs = listOf(
+                    BottomNavItem("历史记录", "history", Icons.Default.History, Icons.Outlined.History),
+                    BottomNavItem("音频提取", "audio_extract", Icons.Default.Audiotrack, Icons.Outlined.Audiotrack),
+                    BottomNavItem("音频转换", "audio_convert", Icons.Default.MusicNote, Icons.Outlined.MusicNote),
+                    BottomNavItem("视频转换", "video_convert", Icons.Default.VideoLibrary, Icons.Outlined.VideoLibrary),
+                    BottomNavItem("图片转换", "image_convert", Icons.Default.Image, Icons.Outlined.Image),
+                    BottomNavItem("关于", "about", Icons.Default.Info, Icons.Outlined.Info)
+                )
+
+                tabs.forEach { tab ->
+                    NavigationBarItem(
+                        selected = currentRoute == tab.route,
+                        onClick = {
+                            navController.navigate(tab.route) {
+                                popUpTo(navController.graph.startDestinationId)
+                                launchSingleTop = true
+                            }
+                        },
+                        icon = {
+                            BadgedBox(badge = { }) {
+                                Icon(
+                                    if (currentRoute == tab.route) tab.selectedIcon else tab.unselectedIcon,
+                                    contentDescription = tab.title
+                                )
+                            }
+                        },
+                        label = { Text(tab.title) }
+                    )
                 }
-            )
+            }
         }
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    elevation = CardDefaults.cardElevation(4.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            Icons.Default.Audiotrack,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "音频提取",
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "从视频文件中提取音频",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = onNavigateToAudioExtract,
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("开始")
-                        }
-                    }
+        Box(modifier = Modifier.padding(paddingValues)) {
+            NavHost(
+                navController = navController,
+                startDestination = "history"
+            ) {
+                composable("history") {
+                    HistoryScreen(
+                        onBack = { navController.popBackStack() },
+                        onNavigateToResult = { outputPath ->
+                            val encodedPath = Uri.encode(outputPath, "/")
+                            navController.navigate("result/$encodedPath")
+                        },
+                        viewModel = viewModel
+                    )
                 }
-            }
-
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    elevation = CardDefaults.cardElevation(4.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            Icons.Default.MusicNote,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "音频格式转换",
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "转换音频文件格式",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = onNavigateToAudioConvert,
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("开始")
-                        }
-                    }
+                composable("audio_extract") {
+                    AudioExtractScreen(
+                        navController = navController,
+                        onBack = { navController.popBackStack() },
+                        viewModel = viewModel
+                    )
                 }
-            }
-
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    elevation = CardDefaults.cardElevation(4.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            Icons.Default.VideoLibrary,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "视频格式转换",
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "转换视频文件格式",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = onNavigateToVideoConvert,
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("开始")
-                        }
-                    }
+                composable("audio_convert") {
+                    AudioConvertScreen(
+                        navController = navController,
+                        onBack = { navController.popBackStack() },
+                        viewModel = viewModel
+                    )
                 }
-            }
-
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    OutlinedButton(
-                        onClick = onNavigateToHistory,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Default.History, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("历史记录")
-                    }
+                composable("video_convert") {
+                    VideoConvertScreen(
+                        navController = navController,
+                        onBack = { navController.popBackStack() },
+                        viewModel = viewModel
+                    )
+                }
+                composable("image_convert") {
+                    ImageConvertScreen(
+                        navController = navController,
+                        onBack = { navController.popBackStack() },
+                        viewModel = viewModel
+                    )
+                }
+                composable("about") {
+                    AboutScreen(
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable(
+                    "result/{outputPath}",
+                    arguments = listOf(navArgument("outputPath") { type = NavType.StringType })
+                ) { backStackEntry ->
+                    val outputPath = backStackEntry.arguments?.getString("outputPath") ?: ""
+                    ResultScreen(
+                        outputPath = outputPath,
+                        onBack = { navController.popBackStack() },
+                        onNewTask = { navController.popBackStack("history", false) }
+                    )
                 }
             }
         }
     }
 }
+
+// 底部导航项数据类
+data class BottomNavItem(
+    val title: String,
+    val route: String,
+    val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    val unselectedIcon: androidx.compose.ui.graphics.vector.ImageVector
+)

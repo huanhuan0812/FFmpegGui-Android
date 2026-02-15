@@ -1,30 +1,44 @@
 package com.huanhuan.ffmpeggui
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -60,7 +74,7 @@ fun FFmpegApp() {
                 onNavigateToAudioConvert = { navController.navigate("audio_convert") },
                 onNavigateToVideoConvert = { navController.navigate("video_convert") },
                 onNavigateToHistory = { navController.navigate("history") },
-                onNavigateToAbout = { navController.navigate("about") }  // 添加关于页面的导航
+                onNavigateToAbout = { navController.navigate("about") }
             )
         }
         composable("audio_extract") {
@@ -83,10 +97,15 @@ fun FFmpegApp() {
         }
         composable("history") {
             HistoryScreen(
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onNavigateToResult = { outputPath ->
+                    // 对输出路径进行编码，确保特殊字符能正确处理
+                    val encodedPath = Uri.encode(outputPath, "/")
+                    navController.navigate("result/$encodedPath")
+                }
             )
         }
-        composable("about") {  // 添加关于页面路由
+        composable("about") {
             AboutScreen(
                 onBack = { navController.popBackStack() }
             )
@@ -112,14 +131,13 @@ fun MainScreen(
     onNavigateToAudioConvert: () -> Unit,
     onNavigateToVideoConvert: () -> Unit,
     onNavigateToHistory: () -> Unit,
-    onNavigateToAbout: () -> Unit  // 添加关于页面的回调
+    onNavigateToAbout: () -> Unit
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("FFmpeg GUI工具") },
                 actions = {
-                    // 在顶部栏添加关于按钮
                     IconButton(onClick = onNavigateToAbout) {
                         Icon(Icons.Default.Info, contentDescription = "关于")
                     }

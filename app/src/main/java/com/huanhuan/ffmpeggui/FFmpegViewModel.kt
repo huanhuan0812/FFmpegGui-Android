@@ -8,25 +8,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegSession
-import com.arthenica.ffmpegkit.ReturnCode
-import com.arthenica.ffmpegkit.Statistics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.*
-import java.util.concurrent.ConcurrentHashMap
+import java.util.Locale
+import java.util.UUID
 
 data class ConversionTask(
     val id: String,
@@ -398,17 +390,29 @@ class FFmpegViewModel : ViewModel() {
 
                 // 检查是否被取消
                 if (isCancelled || !isActive) {
-                    task.status = "已取消"
-                    task.endTime = System.currentTimeMillis()
+                    // 更新任务状态
+                    val taskIndex = historyTasks.indexOfFirst { it.id == taskId }
+                    if (taskIndex >= 0) {
+                        historyTasks[taskIndex] = historyTasks[taskIndex].copy(
+                            status = "已取消",
+                            endTime = System.currentTimeMillis()
+                        )
+                    }
                     _processingEvents.emit(ProcessingEvent.Cancelled)
                     return@launch
                 }
 
-                task.endTime = System.currentTimeMillis()
-
                 val success = result?.returnCode?.isValueSuccess == true
-                task.status = if (success) "完成" else "失败"
-                task.progress = if (success) 1f else 0f
+
+                // 更新任务状态和进度
+                val taskIndex = historyTasks.indexOfFirst { it.id == taskId }
+                if (taskIndex >= 0) {
+                    historyTasks[taskIndex] = historyTasks[taskIndex].copy(
+                        status = if (success) "完成" else "失败",
+                        progress = if (success) 1f else 0f,
+                        endTime = System.currentTimeMillis()
+                    )
+                }
 
                 val message = if (success) {
                     "处理成功: ${File(outputPath).name}"
@@ -430,8 +434,16 @@ class FFmpegViewModel : ViewModel() {
 
             } catch (e: Exception) {
                 e.printStackTrace()
-                task.status = "失败"
-                task.endTime = System.currentTimeMillis()
+
+                // 更新任务状态为失败
+                val taskIndex = historyTasks.indexOfFirst { it.id == taskId }
+                if (taskIndex >= 0) {
+                    historyTasks[taskIndex] = historyTasks[taskIndex].copy(
+                        status = "失败",
+                        progress = 0f,
+                        endTime = System.currentTimeMillis()
+                    )
+                }
 
                 val errorMessage = "处理异常: ${e.message}"
                 _processingEvents.emit(
@@ -458,6 +470,54 @@ class FFmpegViewModel : ViewModel() {
             processingJob?.cancel()
             currentSession = null
             isProcessing = false
+        }
+    }
+
+    // 清理所有历史记录和对应的输出文件
+    fun clearAllHistory() {
+        // 删除所有输出文件
+        historyTasks.forEach { task ->
+            try {
+                val outputFile = File(task.outputPath)
+                if (outputFile.exists()) {
+                    outputFile.delete()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        // 清空历史列表
+        historyTasks.clear()
+    }
+
+    // 清理单个历史记录及其对应的输出文件
+    fun clearHistoryItem(task: ConversionTask) {
+        try {
+            // 删除输出文件
+            val outputFile = File(task.outputPath)
+            if (outputFile.exists()) {
+                outputFile.delete()
+            }
+            // 从历史列表中移除
+            historyTasks.remove(task)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    // 清理所有已完成的输出文件（不删除历史记录）
+    fun clearCompletedOutputFiles() {
+        historyTasks.forEach { task ->
+            if (task.status == "完成") {
+                try {
+                    val outputFile = File(task.outputPath)
+                    if (outputFile.exists()) {
+                        outputFile.delete()
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
         }
     }
 

@@ -7,6 +7,7 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -40,6 +41,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,6 +75,20 @@ fun AudioExtractScreen(
     val scrollState = rememberScrollState()
 
     var isScreenActive by remember { mutableStateOf(true) }
+
+    // 使用 derivedStateOf 优化性能
+    val progress by remember { derivedStateOf { viewModel.progress } }
+    val isProcessing by remember { derivedStateOf { viewModel.isProcessing } }
+
+    // 创建无限过渡动画用于不确定进度条
+    val infiniteTransition = rememberInfiniteTransition()
+    val animatedProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing)
+        )
+    )
 
     DisposableEffect(lifecycleOwner) {
         onDispose {
@@ -219,7 +235,8 @@ fun AudioExtractScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            if (viewModel.isProcessing) {
+            // 处理中状态显示
+            if (isProcessing) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -229,19 +246,33 @@ fun AudioExtractScreen(
                     Column(
                         modifier = Modifier.padding(16.dp)
                     ) {
-                        LinearProgressIndicator(
-                            progress = { viewModel.progress },
-                            modifier = Modifier.fillMaxWidth(),
-                            color = ProgressIndicatorDefaults.linearColor,
-                            trackColor = ProgressIndicatorDefaults.linearTrackColor,
-                            strokeCap = ProgressIndicatorDefaults.LinearStrokeCap,
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "正在处理: ${(viewModel.progress * 100).toInt()}%",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        if (progress > 0f) {
+                            // 有真实进度时显示确定进度条
+                            LinearProgressIndicator(
+                                progress = { progress },
+                                modifier = Modifier.fillMaxWidth(),
+                                color = ProgressIndicatorDefaults.linearColor,
+                                trackColor = ProgressIndicatorDefaults.linearTrackColor,
+                                strokeCap = ProgressIndicatorDefaults.LinearStrokeCap,
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "正在处理: ${(progress * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        } else {
+                            // 没有真实进度时显示不确定进度条
+                            LinearProgressIndicator(
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "正在准备处理...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
@@ -294,9 +325,9 @@ fun AudioExtractScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                enabled = !viewModel.isProcessing
+                enabled = !isProcessing
             ) {
-                if (viewModel.isProcessing) {
+                if (isProcessing) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
                         color = MaterialTheme.colorScheme.onPrimary

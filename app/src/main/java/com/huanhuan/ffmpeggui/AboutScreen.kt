@@ -18,17 +18,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -185,18 +186,6 @@ fun AboutScreen(
                             icon = Icons.Default.VideoLibrary,
                             title = "视频转换",
                             description = "在不同视频格式之间转换，支持分辨率、编码器、质量等参数设置"
-                        )
-
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 12.dp),
-                            thickness = DividerDefaults.Thickness,
-                            color = DividerDefaults.color
-                        )
-
-                        FeatureItem(
-                            icon = Icons.Default.Image,
-                            title = "图片转换",
-                            description = "支持常见图片格式之间的转换，如JPEG、PNG、BMP、GIF等"
                         )
 
                         HorizontalDivider(

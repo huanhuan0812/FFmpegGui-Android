@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegSession
+import com.arthenica.ffmpegkit.FFprobeKit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -19,6 +20,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 import java.util.UUID
+import kotlin.math.min
 
 data class ConversionTask(
     val id: String,
@@ -66,6 +68,15 @@ class FFmpegViewModel : ViewModel() {
     // 用于安全处理回调的 Job
     private var processingJob: Job? = null
 
+    // 媒体总时长（毫秒）
+    private var totalDurationMs by mutableStateOf(0L)
+
+    // 当前处理时间（毫秒）
+    private var currentTimeMs: Double by mutableStateOf(0.0)
+
+    // 估算的总帧数
+    private var estimatedTotalFrames by mutableStateOf(0)
+
     init {
         // 只在 ViewModel 初始化时设置一次回调
         setupFFmpegCallbacks()
@@ -73,13 +84,27 @@ class FFmpegViewModel : ViewModel() {
 
     private fun setupFFmpegCallbacks() {
         com.arthenica.ffmpegkit.FFmpegKitConfig.enableStatisticsCallback { statistics ->
-            // 确保在 ViewModel 活跃时更新 UI
             viewModelScope.launch {
-                if (isActive) {
-                    val frameNumber = statistics.videoFrameNumber
-                    if (frameNumber > 0) {
-                        progress = (frameNumber % 100).toFloat() / 100
-                        if (progress > 0.99f) progress = 0.99f
+                if (isActive && !isCancelled) {
+                    // 方法1：基于时间计算进度
+                    val timeInMilliseconds = statistics.time
+                    currentTimeMs = timeInMilliseconds
+
+                    if (totalDurationMs > 0) {
+                        // 基于总时长计算真实进度
+                        progress = (timeInMilliseconds.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 0.99f)
+                    } else {
+                        // 方法2：基于帧数估算进度
+                        val frameNumber = statistics.videoFrameNumber
+                        if (estimatedTotalFrames > 0 && frameNumber > 0) {
+                            progress = (frameNumber.toFloat() / estimatedTotalFrames.toFloat()).coerceIn(0f, 0.99f)
+                        } else {
+                            // 方法3：使用帧数百分比显示动画效果（当无法获取真实进度时）
+                            if (frameNumber > 0) {
+                                // 使用取模制造动画效果，但保持在合理范围内
+                                progress = ((frameNumber % 100) / 100f) * 0.8f + 0.1f
+                            }
+                        }
                     }
                 }
             }
@@ -87,13 +112,110 @@ class FFmpegViewModel : ViewModel() {
 
         com.arthenica.ffmpegkit.FFmpegKitConfig.enableLogCallback { log ->
             viewModelScope.launch {
-                if (isActive && log != null) {
+                if (isActive && log != null && !isCancelled) {
+                    // 从日志中解析更精确的进度信息
+                    parseProgressFromLog(log.message)
+
                     logOutput += log.message + "\n"
                     // 限制日志长度
                     if (logOutput.length > 10000) {
                         logOutput = logOutput.takeLast(5000)
                     }
                 }
+            }
+        }
+    }
+
+    // 从日志中解析进度信息
+    private fun parseProgressFromLog(logMessage: String) {
+        // 解析时间格式: time=00:01:23.45
+        val timePattern = Regex("time=(\\d{2}):(\\d{2}):(\\d{2}\\.\\d{2})")
+        val matchResult = timePattern.find(logMessage)
+
+        matchResult?.let {
+            try {
+                val hours = it.groupValues[1].toInt()
+                val minutes = it.groupValues[2].toInt()
+                val seconds = it.groupValues[3].toFloat()
+                val currentTimeInSeconds = hours * 3600 + minutes * 60 + seconds
+                currentTimeMs = (currentTimeInSeconds * 1000).toDouble()
+
+                if (totalDurationMs > 0) {
+                    progress = (currentTimeMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 0.99f)
+                }
+            } catch (e: NumberFormatException) {
+                // 忽略解析错误
+            }
+        }
+
+        // 解析帧数信息: frame= 1234
+        val framePattern = Regex("frame=\\s*(\\d+)")
+        val frameMatch = framePattern.find(logMessage)
+
+        frameMatch?.let {
+            try {
+                val frameNumber = it.groupValues[1].toInt()
+                if (estimatedTotalFrames > 0 && frameNumber > 0) {
+                    progress = (frameNumber.toFloat() / estimatedTotalFrames.toFloat()).coerceIn(0f, 0.99f)
+                }
+            } catch (e: NumberFormatException) {
+                // 忽略解析错误
+            }
+        }
+
+        // 解析进度百分比: 比如 "progress=35.2%"
+        val percentPattern = Regex("progress=(\\d+\\.?\\d*)%")
+        val percentMatch = percentPattern.find(logMessage)
+
+        percentMatch?.let {
+            try {
+                val percent = it.groupValues[1].toFloat()
+                progress = (percent / 100f).coerceIn(0f, 0.99f)
+            } catch (e: NumberFormatException) {
+                // 忽略解析错误
+            }
+        }
+    }
+
+    // 获取媒体信息（总时长、总帧数等）
+    private suspend fun getMediaInfo(filePath: String): Pair<Long, Int> {
+        return withContext(Dispatchers.IO) {
+            try {
+                // 使用 FFprobe 获取媒体信息
+                val mediaInfoSession = FFprobeKit.getMediaInformation(filePath)
+                val mediaInformation = mediaInfoSession.mediaInformation
+
+                // 获取总时长（秒）
+                val durationStr = mediaInformation?.getDuration()
+                val duration = durationStr?.toDoubleOrNull()?.times(1000)?.toLong() ?: 0L
+
+                // 估算总帧数（基于时长和典型帧率）
+                val format = mediaInformation?.getFilename()
+                var totalFrames = 0
+
+                // 尝试获取视频流信息
+                val streams = mediaInformation?.streams
+                streams?.firstOrNull { it.type == "video" }?.let { videoStream ->
+                    //val frameRateStr = videoStream.getStringAttribute("r_frame_rate")
+                    val frameRateStr = videoStream.realFrameRate
+                    //val nbFramesStr = videoStream.getStringAttribute("nb_frames")
+
+                    //totalFrames = nbFramesStr?.toIntOrNull() ?: 0
+
+                    if (/*totalFrames == 0 &&*/ duration > 0 && frameRateStr != null) {
+                        // 从帧率估算
+                        val frameRateParts = frameRateStr.split('/')
+                        if (frameRateParts.size == 2) {
+                            val fps = frameRateParts[0].toDouble() / frameRateParts[1].toDouble()
+                            totalFrames = (duration / 1000.0 * fps).toInt()
+                        }
+                    }
+                }
+
+                return@withContext Pair(duration, totalFrames)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                return@withContext Pair(0L, 0)
             }
         }
     }
@@ -367,6 +489,9 @@ class FFmpegViewModel : ViewModel() {
         progress = 0f
         currentCommand = command
         logOutput = ""
+        totalDurationMs = 0L
+        currentTimeMs = 0.0
+        estimatedTotalFrames = 0
 
         val task = ConversionTask(
             id = taskId,
@@ -382,6 +507,11 @@ class FFmpegViewModel : ViewModel() {
         // 在 ViewModelScope 中启动处理
         processingJob = viewModelScope.launch {
             try {
+                // 先获取媒体信息
+                val (duration, totalFrames) = getMediaInfo(inputPath)
+                totalDurationMs = duration
+                estimatedTotalFrames = totalFrames
+
                 // 在 IO 线程执行 FFmpeg 命令
                 val result = withContext(Dispatchers.IO) {
                     currentSession = FFmpegKit.execute(command)
@@ -412,6 +542,11 @@ class FFmpegViewModel : ViewModel() {
                         progress = if (success) 1f else 0f,
                         endTime = System.currentTimeMillis()
                     )
+                }
+
+                // 如果成功，设置进度为100%
+                if (success) {
+                    progress = 1f
                 }
 
                 val message = if (success) {

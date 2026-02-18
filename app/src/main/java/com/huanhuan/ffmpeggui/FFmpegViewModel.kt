@@ -20,7 +20,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 import java.util.UUID
-import kotlin.math.min
 
 data class ConversionTask(
     val id: String,
@@ -554,6 +553,10 @@ class FFmpegViewModel : ViewModel() {
                 } else {
                     "处理失败: ${result?.returnCode} - ${result?.output}"
                 }
+                //Log-----------------------------------------------------------------------------------Log
+//                if(!success){
+//                    Log.d("FFmpegViewModel", "命令执行失败: $command")
+//                }
 
                 // 发送处理完成事件
                 _processingEvents.emit(
@@ -876,6 +879,57 @@ class FFmpegViewModel : ViewModel() {
             width = 0,
             height = 0,
             maintainAspectRatio = true,
+            onComplete = onComplete
+        )
+    }
+
+    fun convertVideoToGif(
+        inputPath: String,
+        outputPath: String,
+        fps: Int,
+        scale: Int,
+        quality: Int,
+        loopCount: Int,
+        colors: Int,
+        startTime: String?,
+        duration: String?,
+        useDither: Boolean,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        val command = buildString {
+            append("-i \"$inputPath\" -y")
+
+            // 添加时间裁剪
+            if (!startTime.isNullOrBlank()) {
+                append(" -ss $startTime")
+            }
+            if (!duration.isNullOrBlank()) {
+                append(" -t $duration")
+            }
+
+            // 简化版滤镜图 - 直接使用palettegen和paletteuse
+            val filterComplex = if (useDither) {
+                "fps=$fps,scale=$scale:-1:flags=lanczos,split[split1][split2];[split1]palettegen[pal];[split2][pal]paletteuse=dither=sierra2_4a"
+            } else {
+                "fps=$fps,scale=$scale:-1:flags=lanczos,split[split1][split2];[split1]palettegen=max_colors=$colors[pal];[split2][pal]paletteuse=dither=none"
+            }
+
+            append(" -filter_complex \"$filterComplex\"")
+
+            // 设置循环次数
+            if (loopCount >= 0) {
+                append(" -loop $loopCount")
+            }
+
+            append(" \"$outputPath\"")
+        }
+
+        executeFFmpegCommand(
+            command = command,
+            taskId = UUID.randomUUID().toString(),
+            type = "视频转GIF",
+            inputPath = inputPath,
+            outputPath = outputPath,
             onComplete = onComplete
         )
     }

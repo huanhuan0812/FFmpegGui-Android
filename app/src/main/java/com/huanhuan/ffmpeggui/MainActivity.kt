@@ -172,6 +172,22 @@ fun FFmpegApp() {
                     )
                 }
 
+                composable("video/gifconvert") {
+                    VideoToGifScreen(
+                        navController = navController,
+                        onBack = { navController.popBackStack() },
+                        viewModel = viewModel
+                    )
+                }
+
+//                composable("video/frameextract") {
+//                    VideoFrameExtractorScreen(
+//                        navController = navController,
+//                        onBack = { navController.popBackStack() },
+//                        viewModel = viewModel
+//                    )
+//                }
+
                 // 音频提取界面（二级页面）
                 composable("audio/extract") {
                     AudioExtractScreen(
@@ -238,7 +254,9 @@ fun VideoMainScreen(
     onBack: () -> Unit
 ) {
     val features = listOf(
-        VideoFeature("convert", "视频转换", Icons.Default.VideoLibrary, "video/convert")
+        VideoFeature("convert", "视频转换", Icons.Default.VideoLibrary, "video/convert"),
+        VideoFeature("gifconvert", "视频转GIF", Icons.Default.Movie, "video/gifconvert"),
+        //VideoFeature("frameextract", "视频帧提取", Icons.Default.PhotoLibrary, "video/frameextract")
         // 可以在这里添加更多视频功能
     )
 

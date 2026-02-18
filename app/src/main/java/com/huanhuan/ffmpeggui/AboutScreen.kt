@@ -68,17 +68,17 @@ fun AboutScreen(
     }
 
     val versionName = packageInfo?.versionName ?: "1.0.0"
-    val versionCode = packageInfo?.versionCode?.toString() ?: "1"
+    val versionCode = packageInfo?.versionCode ?: 1
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("关于") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                }
+                title = { Text("关于") }
+//                navigationIcon = {
+//                    IconButton(onClick = onBack) {
+//                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+//                    }
+//                }
             )
         }
     ) { paddingValues ->

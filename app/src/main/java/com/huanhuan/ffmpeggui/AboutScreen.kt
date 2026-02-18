@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -186,6 +187,18 @@ fun AboutScreen(
                             icon = Icons.Default.VideoLibrary,
                             title = "视频转换",
                             description = "在不同视频格式之间转换，支持分辨率、编码器、质量等参数设置"
+                        )
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            thickness = DividerDefaults.Thickness,
+                            color = DividerDefaults.color
+                        )
+
+                        FeatureItem(
+                            icon = Icons.Default.Image,
+                            title = "图像转换",
+                            description = "支持常见图像格式之间的转换，如JPEG、PNG、BMP等"
                         )
 
                         HorizontalDivider(

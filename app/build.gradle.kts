@@ -88,7 +88,7 @@ android {
     // 打包选项
     packaging {
         resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/{AL2.,GPL3.0}"
         }
         jniLibs {
             useLegacyPackaging = true
@@ -136,8 +136,9 @@ dependencies {
     implementation(libs.coil.compose)
 
     implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.compiler)
+    //implementation(libs.androidx.room.compiler)
     implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
     implementation(libs.androidx.compose.runtime)

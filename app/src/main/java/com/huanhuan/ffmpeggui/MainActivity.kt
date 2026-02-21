@@ -2,6 +2,7 @@ package com.huanhuan.ffmpeggui
 
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
@@ -98,6 +99,18 @@ fun FFmpegApp() {
 
     // 创建ViewModel实例
     val viewModel: FFmpegViewModel = viewModel()
+
+    //初始化数据库
+    LaunchedEffect(Unit) {
+        try {
+            Log.d("MainActivity", "开始初始化数据库")
+            viewModel.initDatabase(context)
+            Log.d("MainActivity", "数据库初始化完成")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "数据库初始化失败", e)
+            e.printStackTrace()
+        }
+    }
 
     // 更新状态
     val updateState by UpdateChecker.updateState.collectAsState()

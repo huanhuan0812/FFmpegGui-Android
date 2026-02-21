@@ -1,5 +1,7 @@
 package com.huanhuan.ffmpeggui
 
+import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -9,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.FFprobeKit
+import com.huanhuan.ffmpeggui.db.HistoryDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -21,6 +24,8 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
+import com.huanhuan.ffmpeggui.db.History
+
 data class ConversionTask(
     val id: String,
     val inputPath: String,
@@ -31,6 +36,37 @@ data class ConversionTask(
     var startTime: Long,
     var endTime: Long? = null
 )
+
+fun ConversionTask.toHistory(): History {
+    return History(
+        id = this.endTime ?: this.startTime,  // 使用task的时间作为主键
+        key = this.id,  // 使用task的id作为key
+        name = "${this.type} - ${File(this.outputPath).name}",  // 生成显示名称
+        path = this.outputPath,  // 保存输出路径
+        timestamp = this.endTime ?: this.startTime,  // 使用结束时间或开始时间
+        createdAt = this.startTime,  // 创建时间
+        size = File(this.outputPath).length().toInt()  // 文件大小
+    )
+}
+
+// 添加转换函数 - 将History转换为ConversionTask（用于加载历史记录）
+// 修改转换函数 - 将History转换为ConversionTask（添加空值处理）
+fun History.toConversionTask(): ConversionTask {
+    return ConversionTask(
+        id = this.key,
+        inputPath = "",  // History中没有保存inputPath，可能需要从其他地方获取或留空
+        outputPath = this.path,
+        type = try {
+            this.name.substringBefore(" - ")  // 从name中解析type
+        } catch (e: Exception) {
+            "未知类型"
+        },
+        status = "完成",  // 默认状态为完成
+        progress = 1f,  // 默认进度100%
+        startTime = this.createdAt,
+        endTime = this.timestamp
+    )
+}
 
 // 添加处理结果事件类
 sealed class ProcessingEvent {
@@ -76,9 +112,49 @@ class FFmpegViewModel : ViewModel() {
     // 估算的总帧数
     private var estimatedTotalFrames by mutableStateOf(0)
 
+    private var database: HistoryDatabase? = null
+
     init {
         // 只在 ViewModel 初始化时设置一次回调
         setupFFmpegCallbacks()
+    }
+
+    // 添加初始化方法
+    fun initDatabase(context: Context) {
+        try {
+            Log.d("FFmpegViewModel", "开始初始化数据库")
+            this.database = HistoryDatabase.getInstance(context)
+            Log.d("FFmpegViewModel", "数据库实例获取成功")
+
+            // 初始化时加载历史记录
+            loadHistoryTasks()
+        } catch (e: Exception) {
+            Log.e("FFmpegViewModel", "数据库初始化失败", e)
+            e.printStackTrace()
+        }
+    }
+
+    // 从数据库加载历史记录
+    // 从数据库加载历史记录
+    private fun loadHistoryTasks() {
+        viewModelScope.launch {
+            try {
+                Log.d("FFmpegViewModel", "开始加载历史记录")
+                database?.historyDao()?.getAllHistories()?.collect { histories ->
+                    Log.d("FFmpegViewModel", "获取到 ${histories.size} 条历史记录")
+                    // 清空当前列表
+                    historyTasks.clear()
+                    // 将History转换为ConversionTask并添加到列表
+                    historyTasks.addAll(histories.map {
+                        Log.d("FFmpegViewModel", "转换历史记录: ${it.id}")
+                        it.toConversionTask()
+                    })
+                }
+            } catch (e: Exception) {
+                Log.e("FFmpegViewModel", "加载历史记录失败", e)
+                e.printStackTrace()
+            }
+        }
     }
 
     private fun setupFFmpegCallbacks() {
@@ -503,6 +579,14 @@ class FFmpegViewModel : ViewModel() {
         )
         historyTasks.add(0, task)
 
+        viewModelScope.launch {
+            try {
+                database?.historyDao()?.insert(task.toHistory())
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         // 在 ViewModelScope 中启动处理
         processingJob = viewModelScope.launch {
             try {
@@ -526,6 +610,15 @@ class FFmpegViewModel : ViewModel() {
                             status = "已取消",
                             endTime = System.currentTimeMillis()
                         )
+
+                        viewModelScope.launch {
+                            try {
+                                database?.historyDao()?.update(historyTasks[taskIndex].toHistory())
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
+
                     }
                     _processingEvents.emit(ProcessingEvent.Cancelled)
                     return@launch
@@ -541,6 +634,14 @@ class FFmpegViewModel : ViewModel() {
                         progress = if (success) 1f else 0f,
                         endTime = System.currentTimeMillis()
                     )
+                }
+
+                viewModelScope.launch {
+                    try {
+                        database?.historyDao()?.update(historyTasks[taskIndex].toHistory())
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
 
                 // 如果成功，设置进度为100%
@@ -624,6 +725,18 @@ class FFmpegViewModel : ViewModel() {
                 e.printStackTrace()
             }
         }
+
+        viewModelScope.launch {
+            try {
+                // 需要逐个删除，因为HistoryDao没有deleteAll方法
+                historyTasks.forEach { task ->
+                    database?.historyDao()?.delete(task.toHistory())
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         // 清空历史列表
         historyTasks.clear()
     }
@@ -636,6 +749,15 @@ class FFmpegViewModel : ViewModel() {
             if (outputFile.exists()) {
                 outputFile.delete()
             }
+
+            viewModelScope.launch {
+                try {
+                    database?.historyDao()?.delete(task.toHistory())
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+
             // 从历史列表中移除
             historyTasks.remove(task)
         } catch (e: Exception) {
@@ -660,6 +782,17 @@ class FFmpegViewModel : ViewModel() {
     }
 
     fun clearHistory() {
+
+        viewModelScope.launch {
+            try {
+                historyTasks.forEach { task ->
+                    database?.historyDao()?.delete(task.toHistory())
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         historyTasks.clear()
     }
 

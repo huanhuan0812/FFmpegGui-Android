@@ -728,10 +728,8 @@ class FFmpegViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                // 需要逐个删除，因为HistoryDao没有deleteAll方法
-                historyTasks.forEach { task ->
-                    database?.historyDao()?.delete(task.toHistory())
-                }
+                database?.historyDao()?.deleteAll()
+
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -785,9 +783,7 @@ class FFmpegViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                historyTasks.forEach { task ->
-                    database?.historyDao()?.delete(task.toHistory())
-                }
+                database?.historyDao()?.deleteAll()
             } catch (e: Exception) {
                 e.printStackTrace()
             }

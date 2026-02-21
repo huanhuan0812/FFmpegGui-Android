@@ -5,31 +5,76 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.outlined.Audiotrack
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.VideoLibrary
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.huanhuan.ffmpeggui.ui.theme.FFmpegGuiTheme
+import kotlinx.coroutines.delay
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 在应用启动时检查更新
+        UpdateChecker.checkForUpdates()
+
         setContent {
             FFmpegGuiTheme {
                 Surface(
@@ -44,20 +89,57 @@ class MainActivity : ComponentActivity() {
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Preview
 @Composable
 fun FFmpegApp() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val context = LocalContext.current
 
     // 创建ViewModel实例
     val viewModel: FFmpegViewModel = viewModel()
 
+    // 更新状态
+    val updateState by UpdateChecker.updateState.collectAsState()
+
+    // 控制更新对话框的显示
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var showErrorDialog by remember { mutableStateOf(false) }
+    var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+    var errorMessage by remember { mutableStateOf("") }
+
+    // 处理更新状态变化
+    LaunchedEffect(updateState) {
+        when (updateState) {
+            is UpdateChecker.UpdateState.Available -> {
+                // 延迟一点显示，避免启动时立即弹出影响用户体验
+                delay(500)
+                updateInfo = (updateState as UpdateChecker.UpdateState.Available).updateInfo
+                showUpdateDialog = true
+            }
+            is UpdateChecker.UpdateState.Error -> {
+                errorMessage = (updateState as UpdateChecker.UpdateState.Error).message
+                showErrorDialog = true
+            }
+            else -> {}
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("FFmpeg GUI") },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("FFmpeg GUI")
+                        if (updateState is UpdateChecker.UpdateState.Checking) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                    }
+                },
                 actions = {
                     // 右上角的关于按钮
                     IconButton(onClick = {
@@ -181,7 +263,7 @@ fun FFmpegApp() {
                 }
 
 //                composable("video/frameextract") {
-//                    VideoFrameExtractorScreen(
+//                    FrameExtractScreen(
 //                        navController = navController,
 //                        onBack = { navController.popBackStack() },
 //                        viewModel = viewModel
@@ -237,7 +319,35 @@ fun FFmpegApp() {
             }
         }
     }
+
+    // 更新可用对话框
+    if (showUpdateDialog && updateInfo != null) {
+        UpdateDialog(
+            updateInfo = updateInfo!!,
+            onDismiss = {
+                showUpdateDialog = false
+                UpdateChecker.resetState()
+            }
+        )
+    }
+
+    // 更新错误对话框
+    if (showErrorDialog) {
+        UpdateErrorDialog(
+            message = errorMessage,
+            onDismiss = {
+                showErrorDialog = false
+                UpdateChecker.resetState()
+            },
+            onRetry = {
+                showErrorDialog = false
+                UpdateChecker.checkForUpdates()
+            }
+        )
+    }
 }
+
+
 
 // 视频功能数据类
 data class VideoFeature(

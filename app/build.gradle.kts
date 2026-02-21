@@ -1,8 +1,11 @@
 import com.android.builder.model.PROPERTY_SIGNING_STORE_FILE
+import org.jetbrains.kotlin.gradle.internal.Kapt3GradleSubplugin.Companion.findKaptConfiguration
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    id("com.google.devtools.ksp")
+    id("kotlinx-serialization") // 添加序列化插件
 }
 
 android {
@@ -12,6 +15,8 @@ android {
             minorApiLevel = 1
         }
     }
+
+
 
     defaultConfig {
         applicationId = "com.huanhuan.ffmpeggui"
@@ -89,6 +94,15 @@ android {
             useLegacyPackaging = true
         }
     }
+
+    configurations.all {
+        resolutionStrategy {
+            // 强制使用新版本的 annotations
+            force("org.jetbrains:annotations:23.0.0")
+            // 或者排除旧版本
+            exclude(group = "com.intellij", module = "annotations")
+        }
+    }
 }
 
 dependencies {
@@ -103,7 +117,9 @@ dependencies {
     implementation(libs.androidx.compose.material3.adaptive.navigation.suite)
 
     // FFmpeg 依赖 - 注意这个库可能已经包含多架构支持
-    implementation("io.github.jamaismagic.ffmpeg:ffmpeg-kit-lts-16kb:6.1.7")
+    implementation("io.github.jamaismagic.ffmpeg:ffmpeg-kit-lts-16kb:6.1.7"){
+        exclude(group = "com.intellij", module = "annotations")
+    }
 
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.androidx.navigation.ui.ktx)
@@ -113,6 +129,18 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.ui)
+
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
+    implementation(libs.exoplayer)
+    implementation(libs.coil.compose)
+
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.compiler)
+    implementation(libs.androidx.room.ktx)
+
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
+    implementation(libs.androidx.compose.runtime)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

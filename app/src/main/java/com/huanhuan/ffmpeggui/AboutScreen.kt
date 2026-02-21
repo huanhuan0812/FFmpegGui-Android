@@ -22,14 +22,17 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,6 +44,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +57,15 @@ import androidx.core.net.toUri
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,11 +133,87 @@ fun AboutScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                Text(
-                    text = "版本 $versionName (Build $versionCode)",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                // 版本号和检查更新按钮
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "版本 $versionName (Build $versionCode)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // 检查更新按钮
+                    var showUpdateDialog by remember { mutableStateOf(false) }
+                    var showErrorDialog by remember { mutableStateOf(false) }
+                    val updateState by UpdateChecker.updateState.collectAsState()
+
+                    // 处理更新状态
+                    LaunchedEffect(updateState) {
+                        when (updateState) {
+                            is UpdateChecker.UpdateState.Available -> {
+                                showUpdateDialog = true
+                            }
+                            is UpdateChecker.UpdateState.Error -> {
+                                showErrorDialog = true
+                            }
+                            else -> {}
+                        }
+                    }
+
+                    // 显示更新对话框
+                    if (showUpdateDialog && updateState is UpdateChecker.UpdateState.Available) {
+                        UpdateDialog(
+                            updateInfo = (updateState as UpdateChecker.UpdateState.Available).updateInfo,
+                            onDismiss = {
+                                showUpdateDialog = false
+                                UpdateChecker.resetState()
+                            }
+                        )
+                    }
+
+                    // 显示错误对话框
+                    if (showErrorDialog && updateState is UpdateChecker.UpdateState.Error) {
+                        UpdateErrorDialog(
+                            message = (updateState as UpdateChecker.UpdateState.Error).message,
+                            onDismiss = {
+                                showErrorDialog = false
+                                UpdateChecker.resetState()
+                            },
+                            onRetry = {
+                                showErrorDialog = false
+                                UpdateChecker.checkForUpdates()
+                            }
+                        )
+                    }
+
+                    // 检查更新按钮
+                    IconButton(
+                        onClick = {
+                            UpdateChecker.checkForUpdates()
+                        },
+                        enabled = updateState !is UpdateChecker.UpdateState.Checking,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        if (updateState is UpdateChecker.UpdateState.Checking) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.Replay,
+                                contentDescription = "检查更新",
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 

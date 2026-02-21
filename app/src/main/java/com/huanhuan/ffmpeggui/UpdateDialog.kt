@@ -122,7 +122,7 @@ fun getAcceleratedDownloadUrl(originalUrl: String): String {
     return when {
         originalUrl.contains("github.com") -> {
             // 将 https://github.com/... 转换为 https://gh.llkk.cc/github.com/...
-            originalUrl.replace("https://github.com/", "https://gh.llkk.cc/github.com/")
+            originalUrl.replace("https://github.com/", "https://gh.llkk.cc/https://github.com/")
         }
         originalUrl.contains("objects.githubusercontent.com") ||
                 originalUrl.contains("github-releases") -> {
@@ -172,283 +172,203 @@ fun UpdateDialog(
                 containerColor = MaterialTheme.colorScheme.surface
             )
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp)
+            // 添加一个可滚动的列
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                // 标题栏
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                androidx.compose.foundation.lazy.LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "发现新版本",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "关闭"
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // 版本信息
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Info,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "最新版本：${updateInfo.tag_name}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                if (updateInfo.name.isNotBlank() && updateInfo.name != updateInfo.tag_name) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = updateInfo.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // 设备架构信息
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Speed,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "设备架构: $deviceArch",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-
-                        if (selectedApkUrl != null) {
-                            Spacer(modifier = Modifier.width(8.dp))
+                    // 标题栏
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = "✓ 已匹配",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
+                                text = "发现新版本",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
                             )
-                        } else if (originalApkUrl != null) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "⚡ 通用版本",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.secondary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // 更新说明
-                Text(
-                    text = "更新说明：",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // 说明内容
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    )
-                ) {
-                    Text(
-                        text = updateInfo.body.ifEmpty { "暂无详细更新说明" },
-                        modifier = Modifier.padding(16.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 8,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // 可用APK列表（如果有多个）
-                if (availableApks.size > 1) {
-                    Text(
-                        text = "可用版本：",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Medium
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        availableApks.take(3).forEach { apk ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            IconButton(onClick = onDismiss) {
                                 Icon(
-                                    Icons.Default.Download,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(12.dp),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = apk.name,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
+                                    Icons.Default.Close,
+                                    contentDescription = "关闭"
                                 )
                             }
                         }
-                        if (availableApks.size > 3) {
+                    }
+
+                    // 版本信息
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "......等${availableApks.size}个版本",
-                                style = MaterialTheme.typography.bodySmall,
+                                text = "最新版本：${updateInfo.tag_name}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    if (updateInfo.name.isNotBlank() && updateInfo.name != updateInfo.tag_name) {
+                        item {
+                            Text(
+                                text = updateInfo.name,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                // 下载按钮区域
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // 第一行：架构匹配下载 和 以后再说
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.weight(1f)
+                    // 设备架构信息
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                            )
                         ) {
-                            Text("以后再说")
-                        }
-
-                        // 主下载按钮（优先使用架构匹配的APK）
-                        val mainDownloadUrl = selectedApkUrl ?: originalApkUrl ?: releasePageUrl
-                        val isMainDownloadEnabled = mainDownloadUrl.isNotBlank()
-
-                        TooltipBox(
-                            positionProvider = TooltipDefaults.rememberRichTooltipPositionProvider(),
-                            tooltip = {
-                                Card(
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.inverseSurface
-                                    )
-                                ) {
-                                    Text(
-                                        text = when {
-                                            selectedApkUrl != null -> "下载适配 ${deviceArch} 的版本"
-                                            originalApkUrl != null -> "下载通用APK版本"
-                                            else -> "使用发布页面下载"
-                                        },
-                                        modifier = Modifier.padding(8.dp),
-                                        color = MaterialTheme.colorScheme.inverseOnSurface
-                                    )
-                                }
-                            },
-                            state = rememberTooltipState()
-                        ) {
-                            Button(
-                                onClick = {
-                                    try {
-                                        val intent = Intent(Intent.ACTION_VIEW, mainDownloadUrl.toUri())
-                                        context.startActivity(intent)
-                                        onDismiss()
-                                    } catch (e: Exception) {
-                                        Toast.makeText(context, "无法打开下载链接: ${e.message}", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                modifier = Modifier.weight(1f),
-                                enabled = isMainDownloadEnabled
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    Icons.Default.Download,
+                                    Icons.Default.Speed,
                                     contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    when {
-                                        selectedApkUrl != null -> "下载($deviceArch)"
-                                        originalApkUrl != null -> "下载(通用)"
-                                        else -> "下载(发布页)"
-                                    }
+                                    text = "设备架构: $deviceArch",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
+
+                                if (selectedApkUrl != null) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "✓ 已匹配",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                } else if (originalApkUrl != null) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "⚡ 通用版本",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.secondary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }
 
-                    // 第二行：加速下载和发布页按钮（仅当有APK链接时显示加速选项）
-                    if (selectedApkUrl != null || originalApkUrl != null) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            // 发布页按钮（备选）
-                            OutlinedButton(
-                                onClick = {
-                                    try {
-                                        val intent = Intent(Intent.ACTION_VIEW, releasePageUrl.toUri())
-                                        context.startActivity(intent)
-                                        onDismiss()
-                                    } catch (e: Exception) {
-                                        Toast.makeText(context, "无法打开发布页", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                modifier = Modifier.weight(1f),
-                                enabled = releasePageUrl.isNotBlank()
-                            ) {
-                                Icon(
-                                    Icons.Default.Link,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("发布页")
-                            }
+                    // 更新说明标题
+                    item {
+                        Text(
+                            text = "更新说明：",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
 
-                            // 加速下载按钮（使用选中的APK链接加速）
-                            val apkUrlForAccelerate = selectedApkUrl ?: originalApkUrl
-                            if (apkUrlForAccelerate != null) {
+                    // 说明内容
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Text(
+                                text = updateInfo.body.ifEmpty { "暂无详细更新说明" },
+                                modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.bodyMedium
+                                // 移除maxLines限制，让所有内容都可以滚动查看
+                            )
+                        }
+                    }
+
+                    // 可用APK列表（如果有多个）
+                    if (availableApks.size > 1) {
+                        item {
+                            Text(
+                                text = "可用版本：",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+
+                        item {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                availableApks.forEach { apk ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Download,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(12.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = apk.name,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 下载按钮区域
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // 第一行：架构匹配下载 和 以后再说
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = onDismiss,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("以后再说")
+                                }
+
+                                // 主下载按钮（优先使用架构匹配的APK）
+                                val mainDownloadUrl = selectedApkUrl ?: originalApkUrl ?: releasePageUrl
+                                val isMainDownloadEnabled = mainDownloadUrl.isNotBlank()
+
                                 TooltipBox(
                                     positionProvider = TooltipDefaults.rememberRichTooltipPositionProvider(),
                                     tooltip = {
@@ -458,7 +378,11 @@ fun UpdateDialog(
                                             )
                                         ) {
                                             Text(
-                                                text = "使用 gh.llkk.cc 加速下载\n适合下载缓慢的情况",
+                                                text = when {
+                                                    selectedApkUrl != null -> "下载适配 ${deviceArch} 的版本"
+                                                    originalApkUrl != null -> "下载通用APK版本"
+                                                    else -> "使用发布页面下载"
+                                                },
                                                 modifier = Modifier.padding(8.dp),
                                                 color = MaterialTheme.colorScheme.inverseOnSurface
                                             )
@@ -468,52 +392,134 @@ fun UpdateDialog(
                                 ) {
                                     Button(
                                         onClick = {
-                                            val acceleratedUrl = getAcceleratedDownloadUrl(apkUrlForAccelerate)
                                             try {
-                                                val intent = Intent(Intent.ACTION_VIEW, acceleratedUrl.toUri())
+                                                val intent = Intent(Intent.ACTION_VIEW, mainDownloadUrl.toUri())
                                                 context.startActivity(intent)
                                                 onDismiss()
                                             } catch (e: Exception) {
-                                                Toast.makeText(context, "无法打开加速链接", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "无法打开下载链接: ${e.message}", Toast.LENGTH_SHORT).show()
                                             }
                                         },
                                         modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.secondary
-                                        )
+                                        enabled = isMainDownloadEnabled
                                     ) {
                                         Icon(
-                                            Icons.Default.Speed,
+                                            Icons.Default.Download,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            when {
+                                                selectedApkUrl != null -> "下载($deviceArch)"
+                                                originalApkUrl != null -> "下载(通用)"
+                                                else -> "下载(发布页)"
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            // 第二行：加速下载和发布页按钮（仅当有APK链接时显示加速选项）
+                            if (selectedApkUrl != null || originalApkUrl != null) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    // 发布页按钮（备选）
+                                    OutlinedButton(
+                                        onClick = {
+                                            try {
+                                                val intent = Intent(Intent.ACTION_VIEW, releasePageUrl.toUri())
+                                                context.startActivity(intent)
+                                                onDismiss()
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "无法打开发布页", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        enabled = releasePageUrl.isNotBlank()
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Link,
                                             contentDescription = null,
                                             modifier = Modifier.size(18.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("加速下载")
+                                        Text("发布页")
+                                    }
+
+                                    // 加速下载按钮（使用选中的APK链接加速）
+                                    val apkUrlForAccelerate = selectedApkUrl ?: originalApkUrl
+                                    if (apkUrlForAccelerate != null) {
+                                        TooltipBox(
+                                            positionProvider = TooltipDefaults.rememberRichTooltipPositionProvider(),
+                                            tooltip = {
+                                                Card(
+                                                    colors = CardDefaults.cardColors(
+                                                        containerColor = MaterialTheme.colorScheme.inverseSurface
+                                                    )
+                                                ) {
+                                                    Text(
+                                                        text = "使用 gh.llkk.cc 加速下载\n适合下载缓慢的情况",
+                                                        modifier = Modifier.padding(8.dp),
+                                                        color = MaterialTheme.colorScheme.inverseOnSurface
+                                                    )
+                                                }
+                                            },
+                                            state = rememberTooltipState(),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Button(
+                                                onClick = {
+                                                    val acceleratedUrl = getAcceleratedDownloadUrl(apkUrlForAccelerate)
+                                                    try {
+                                                        val intent = Intent(Intent.ACTION_VIEW, acceleratedUrl.toUri())
+                                                        context.startActivity(intent)
+                                                        onDismiss()
+                                                    } catch (e: Exception) {
+                                                        Toast.makeText(context, "无法打开加速链接", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = MaterialTheme.colorScheme.secondary
+                                                )
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Speed,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("加速下载")
+                                            }
+                                        }
                                     }
                                 }
-                            }
-                        }
-                    } else if (releasePageUrl.isNotBlank()) {
-                        // 如果没有APK只有发布页，显示一个单独的发布页按钮
-                        Button(
-                            onClick = {
-                                try {
-                                    val intent = Intent(Intent.ACTION_VIEW, releasePageUrl.toUri())
-                                    context.startActivity(intent)
-                                    onDismiss()
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "无法打开发布页", Toast.LENGTH_SHORT).show()
+                            } else if (releasePageUrl.isNotBlank()) {
+                                // 如果没有APK只有发布页，显示一个单独的发布页按钮
+                                Button(
+                                    onClick = {
+                                        try {
+                                            val intent = Intent(Intent.ACTION_VIEW, releasePageUrl.toUri())
+                                            context.startActivity(intent)
+                                            onDismiss()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "无法打开发布页", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        Icons.Default.Link,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("前往发布页下载")
                                 }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(
-                                Icons.Default.Link,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("前往发布页下载")
+                            }
                         }
                     }
                 }

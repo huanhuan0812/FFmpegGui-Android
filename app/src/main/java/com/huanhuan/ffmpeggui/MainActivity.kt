@@ -3,6 +3,7 @@ package com.huanhuan.ffmpeggui
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
@@ -134,7 +135,9 @@ fun FFmpegApp() {
                 errorMessage = (updateState as UpdateChecker.UpdateState.Error).message
                 showErrorDialog = true
             }
-            else -> {}
+            else -> {
+                Toast.makeText(context, "已是最新版本", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 

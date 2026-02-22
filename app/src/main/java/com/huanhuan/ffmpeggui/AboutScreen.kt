@@ -58,22 +58,17 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import com.huanhuan.ffmpeggui.BuildConfig
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val packageInfo = remember {
-        try {
-            context.packageManager.getPackageInfo(context.packageName, 0)
-        } catch (e: Exception) {
-            null
-        }
-    }
 
-    val versionName = packageInfo?.versionName ?: "1.0.0"
-    val versionCode = packageInfo?.versionCode ?: 1
+    val versionName = BuildConfig.VERSION_NAME
+    val versionCode = BuildConfig.VERSION_CODE
 
     Scaffold(
         topBar = {

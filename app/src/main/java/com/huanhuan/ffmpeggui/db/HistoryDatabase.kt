@@ -19,10 +19,10 @@ abstract class HistoryDatabase : RoomDatabase() {
         fun getInstance(context: Context): HistoryDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    HistoryDatabase::class.java,
-                    "history_database" // 数据库文件名
-                ).fallbackToDestructiveMigration()  // 如果迁移有问题，重新创建数据库
+                                context.applicationContext,
+                                HistoryDatabase::class.java,
+                                "history_database" // 数据库文件名
+                            ).fallbackToDestructiveMigration(false)  // 如果迁移有问题，重新创建数据库
                 .build()
                 INSTANCE = instance
                 instance

@@ -20,9 +20,9 @@ media3Exoplayer = "1.9.2"
 media3Ui = "1.9.2"
 exoplayer = "2.18.5"
 coilCompose = "2.7.0"
-roomRuntime = "2.6.0-alpha01"
-roomCompiler = "2.6.0-alpha01"
-roomKtx = "2.6.0-alpha01"
+roomRuntime = "2.8.4"
+roomCompiler = "2.8.4"
+roomKtx = "2.8.4"
 runtime = "1.10.3"
 
 [libraries]

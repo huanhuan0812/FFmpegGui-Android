@@ -77,8 +77,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     buildFeatures {
@@ -140,7 +140,7 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
-    implementation("com.vdurmont:semver4j:3.1.0")
+    implementation("org.semver4j:semver4j:5.3.0")
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
     implementation(libs.androidx.compose.runtime)

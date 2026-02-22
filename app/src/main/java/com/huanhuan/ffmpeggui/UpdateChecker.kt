@@ -1,6 +1,6 @@
-// UpdateChecker.kt
 package com.huanhuan.ffmpeggui
 
+import org.semver4j.Semver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,10 +25,25 @@ object UpdateChecker {
         object Checking : UpdateState()
         data class Available(
             val updateInfo: UpdateInfo,
-            val compareResult: VersionCompareResult  // 使用工具类的比较结果
+            val isNewVersion: Boolean,
+            val comparisonResult: VersionComparisonResult? = null
         ) : UpdateState()
         object NotAvailable : UpdateState()
         data class Error(val message: String) : UpdateState()
+    }
+
+    // 版本比较结果详情
+    data class VersionComparisonResult(
+        val currentVersion: String,
+        val latestVersion: String,
+        val isNewer: Boolean,
+        val isSame: Boolean,
+        val diffType: VersionDiff? = null
+    )
+
+    // 版本差异类型
+    enum class VersionDiff {
+        MAJOR, MINOR, PATCH, PRE_RELEASE, UNKNOWN
     }
 
     // 初始化设置
@@ -57,15 +72,37 @@ object UpdateChecker {
 
                     val updateInfo = json.decodeFromString<UpdateInfo>(response)
 
-                    // 使用 VersionComparator 进行版本比较
-                    val currentVersion = currentVersionProvider?.invoke() ?: "1.0.0"
-                    val compareResult = VersionComparator.compare(currentVersion, updateInfo.tag_name)
+                    // 使用 semver4j 进行版本比较
+                    val comparisonResult = compareVersions(updateInfo.tag_name)
 
                     withContext(Dispatchers.Main) {
-                        _updateState.value = UpdateState.Available(
-                            updateInfo = updateInfo,
-                            compareResult = compareResult
-                        )
+                        when {
+                            comparisonResult == null -> {
+                                // 版本解析失败，降级为字符串比较
+                                val currentVersion = currentVersionProvider?.invoke() ?: "1.0.0"
+                                val isNewVersion = updateInfo.tag_name != currentVersion
+                                _updateState.value = UpdateState.Available(
+                                    updateInfo = updateInfo,
+                                    isNewVersion = isNewVersion
+                                )
+                            }
+                            comparisonResult.isNewer -> {
+                                // 有新版本
+                                _updateState.value = UpdateState.Available(
+                                    updateInfo = updateInfo,
+                                    isNewVersion = true,
+                                    comparisonResult = comparisonResult
+                                )
+                            }
+                            else -> {
+                                // 版本相同或更低
+                                _updateState.value = UpdateState.Available(
+                                    updateInfo = updateInfo,
+                                    isNewVersion = false,
+                                    comparisonResult = comparisonResult
+                                )
+                            }
+                        }
                     }
                 } else {
                     withContext(Dispatchers.Main) {
@@ -81,7 +118,58 @@ object UpdateChecker {
         }
     }
 
+    // 使用 org.semver4j 比较版本
+    private fun compareVersions(latestVersionStr: String): VersionComparisonResult? {
+        val currentVersionStr = currentVersionProvider?.invoke() ?: return null
+
+        return try {
+            // 清理版本号（移除可能的 'v' 前缀）
+            val cleanCurrent = currentVersionStr.trimStart('v', 'V')
+            val cleanLatest = latestVersionStr.trimStart('v', 'V')
+
+            // 创建 Semver 对象
+            val currentSemver = Semver(cleanCurrent)
+            val latestSemver = Semver(cleanLatest)
+
+            // 比较版本
+            val isNewer = latestSemver.isGreaterThan(currentSemver)
+            val isSame = latestSemver.isEqualTo(currentSemver)
+
+            // 确定差异类型
+            val diffType = when {
+                latestSemver.major > currentSemver.major -> VersionDiff.MAJOR
+                latestSemver.minor > currentSemver.minor -> VersionDiff.MINOR
+                latestSemver.patch > currentSemver.patch -> VersionDiff.PATCH
+                latestSemver.isStable != currentSemver.isStable -> VersionDiff.PRE_RELEASE
+                else -> null
+            }
+
+            VersionComparisonResult(
+                currentVersion = currentVersionStr,
+                latestVersion = latestVersionStr,
+                isNewer = isNewer,
+                isSame = isSame,
+                diffType = if (isNewer) diffType else null
+            )
+        } catch (e: Exception) {
+            // 版本解析失败，返回 null，让调用方使用字符串比较
+            e.printStackTrace()
+            null
+        }
+    }
+
     fun resetState() {
         _updateState.value = UpdateState.Idle
+    }
+
+    // 获取版本差异的描述文本
+    fun getVersionDiffDescription(result: VersionComparisonResult): String {
+        return when (result.diffType) {
+            VersionDiff.MAJOR -> "主要版本更新（可能包含不兼容的API变更）"
+            VersionDiff.MINOR -> "次要版本更新（新增功能，向下兼容）"
+            VersionDiff.PATCH -> "补丁版本更新（问题修复，向下兼容）"
+            VersionDiff.PRE_RELEASE -> "预发布版本更新"
+            else -> "有新版本可用"
+        }
     }
 }

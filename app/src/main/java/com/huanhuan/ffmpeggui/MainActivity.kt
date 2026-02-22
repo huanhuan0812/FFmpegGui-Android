@@ -287,7 +287,7 @@ fun FFmpegApp() {
 //                }
 
                 // 音频提取界面（二级页面）
-                composable("audio/extract") {
+                composable("video/extract") {
                     AudioExtractScreen(
                         navController = navController,
                         onBack = { navController.popBackStack() },
@@ -380,6 +380,7 @@ fun VideoMainScreen(
     onBack: () -> Unit
 ) {
     val features = listOf(
+        AudioFeature("extract", "音频提取", Icons.Default.Audiotrack, "video/extract"),
         VideoFeature("convert", "视频转换", Icons.Default.VideoLibrary, "video/convert"),
         VideoFeature("gifconvert", "视频转GIF", Icons.Default.Movie, "video/gifconvert"),
         //VideoFeature("frameextract", "视频帧提取", Icons.Default.PhotoLibrary, "video/frameextract")
@@ -408,7 +409,6 @@ fun AudioMainScreen(
     onBack: () -> Unit
 ) {
     val features = listOf(
-        AudioFeature("extract", "音频提取", Icons.Default.Audiotrack, "audio/extract"),
         AudioFeature("convert", "音频转换", Icons.Default.MusicNote, "audio/convert")
     )
 

@@ -316,7 +316,8 @@ fun FFmpegApp() {
                 // 关于界面
                 composable("about") {
                     AboutScreen(
-                        onBack = { navController.popBackStack() }
+                        //onBack = { navController.popBackStack() }
+                        onBack = {navController.navigate("history")}
                     )
                 }
 

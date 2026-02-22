@@ -58,8 +58,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-import com.huanhuan.ffmpeggui.BuildConfig
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(

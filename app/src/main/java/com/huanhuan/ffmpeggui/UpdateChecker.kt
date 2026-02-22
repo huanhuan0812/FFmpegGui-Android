@@ -1,8 +1,5 @@
 package com.huanhuan.ffmpeggui
 
-import android.widget.Toast
-import com.huanhuan.ffmpeggui.BuildConfig
-import org.semver4j.Semver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import org.semver4j.Semver
 import java.net.HttpURLConnection
 import java.net.URL
 

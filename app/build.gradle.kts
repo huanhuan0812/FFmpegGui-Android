@@ -143,6 +143,9 @@ dependencies {
 
     implementation("org.semver4j:semver4j:5.3.0")
 
+    implementation("io.noties.markwon:core:4.6.2")
+    implementation("io.noties.markwon:editor:4.6.2")
+
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
     implementation(libs.androidx.compose.runtime)
 

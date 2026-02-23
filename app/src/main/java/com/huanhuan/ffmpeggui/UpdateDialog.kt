@@ -71,10 +71,8 @@ fun MarkdownText(
     markdown: String,
     modifier: Modifier = Modifier,
     color: androidx.compose.ui.graphics.Color? = null,
-    linkColor: androidx.compose.ui.graphics.Color? = null
 ) {
     val markwon = rememberMarkwon()
-    val context = LocalContext.current
 
     // ✅ 在Composable函数内获取颜色值
     val textColor = color ?: MaterialTheme.colorScheme.onSurfaceVariant
@@ -337,7 +335,6 @@ fun UpdateDialog(
                             markdown = updateInfo.body,
                             modifier = Modifier.padding(16.dp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            linkColor = MaterialTheme.colorScheme.primary
                         )
                     } else {
                         Text(

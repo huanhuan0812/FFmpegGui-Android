@@ -11,6 +11,8 @@ import androidx.lifecycle.viewModelScope
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.FFprobeKit
+import com.arthenica.ffmpegkit.LogCallback
+import com.arthenica.ffmpegkit.ReturnCode
 import com.huanhuan.ffmpeggui.db.HistoryDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,6 +27,10 @@ import java.util.Locale
 import java.util.UUID
 
 import com.huanhuan.ffmpeggui.db.History
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 data class ConversionTask(
     val id: String,
@@ -784,6 +790,7 @@ class FFmpegViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 database?.historyDao()?.deleteAll()
+
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -1061,5 +1068,96 @@ class FFmpegViewModel : ViewModel() {
             outputPath = outputPath,
             onComplete = onComplete
         )
+    }
+
+    private val _executionResult = MutableStateFlow("")
+    val executionResult: StateFlow<String> = _executionResult.asStateFlow()
+
+    private val _isExecuting = MutableStateFlow(false)
+    val isExecuting: StateFlow<Boolean> = _isExecuting.asStateFlow()
+
+    fun executeCommand(command: String) {
+        viewModelScope.launch {
+            _isExecuting.value = true
+            _executionResult.value = "正在执行命令: $command\n\n"
+
+            try {
+                // 创建日志回调来实现实时输出
+                val logCallback = LogCallback { log ->
+                    // 在主线程中更新UI
+                    viewModelScope.launch(Dispatchers.Main) {
+                        val message = log.message ?: ""
+                        if (message.isNotBlank()) {
+                            _executionResult.update { currentResult ->
+                                currentResult + message
+                            }
+                        }
+                    }
+                }
+
+                // 在IO线程执行命令，但使用回调实时更新
+                withContext(Dispatchers.IO) {
+                    currentSession = FFmpegKit.executeWithArgumentsAsync(
+                        command.split(" ").toTypedArray(),
+                        { session ->
+                            // 完成回调
+                            viewModelScope.launch(Dispatchers.Main) {
+                                handleSessionResult(session)
+                            }
+                        },
+                        logCallback,
+                        null // 统计回调，这里不需要
+                    )
+                }
+
+            } catch (e: Exception) {
+                _executionResult.update { it + "\n❌ 执行异常: ${e.message}" }
+                _isExecuting.value = false
+            }
+        }
+    }
+
+    private fun handleSessionResult(session: FFmpegSession) {
+        val returnCode = session.returnCode
+        val output = StringBuilder()
+
+        when {
+            ReturnCode.isSuccess(returnCode) -> {
+                output.append("\n✅ 命令执行成功\n")
+            }
+            ReturnCode.isCancel(returnCode) -> {
+                output.append("\n⚠️ 命令已被取消\n")
+            }
+            else -> {
+                output.append("\n❌ 命令执行失败\n")
+            }
+        }
+
+        // 添加最终的完整输出（如果有）
+        val outputLog = session.output
+        if (!outputLog.isNullOrEmpty() && !_executionResult.value.contains(outputLog)) {
+            output.append("\n📋 完整输出:\n")
+            output.append(outputLog)
+        }
+
+        // 添加错误信息
+        val failStackTrace = session.failStackTrace
+        if (failStackTrace != null) {
+            output.append("\n📊 错误堆栈:\n")
+            output.append(failStackTrace)
+        }
+
+        _executionResult.update { it + output.toString() }
+        _isExecuting.value = false
+        currentSession = null
+    }
+
+    fun clearResult() {
+        _executionResult.value = ""
+    }
+
+    fun cancelExecution() {
+        currentSession?.cancel()
+        _isExecuting.value = false
     }
 }

@@ -3,7 +3,6 @@ package com.huanhuan.ffmpeggui
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
@@ -28,16 +27,17 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.outlined.Audiotrack
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,11 +50,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -67,15 +63,11 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.huanhuan.ffmpeggui.ui.theme.FFmpegGuiTheme
-import kotlinx.coroutines.delay
 
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // 在应用启动时检查更新
-        UpdateChecker.checkForUpdates()
 
         setContent {
             FFmpegGuiTheme {
@@ -101,7 +93,7 @@ fun FFmpegApp() {
     // 创建ViewModel实例
     val viewModel: FFmpegViewModel = viewModel()
 
-    //初始化数据库
+    // 初始化数据库
     LaunchedEffect(Unit) {
         try {
             Log.d("MainActivity", "开始初始化数据库")
@@ -113,49 +105,10 @@ fun FFmpegApp() {
         }
     }
 
-    // 更新状态
-    val updateState by UpdateChecker.updateState.collectAsState()
-
-    // 控制更新对话框的显示
-    var showUpdateDialog by remember { mutableStateOf(false) }
-    var showErrorDialog by remember { mutableStateOf(false) }
-    var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
-    var errorMessage by remember { mutableStateOf("") }
-
-    // 处理更新状态变化
-    LaunchedEffect(updateState) {
-        when (updateState) {
-            is UpdateChecker.UpdateState.Available -> {
-                // 延迟一点显示，避免启动时立即弹出影响用户体验
-                delay(500)
-                updateInfo = (updateState as UpdateChecker.UpdateState.Available).updateInfo
-                showUpdateDialog = true
-            }
-            is UpdateChecker.UpdateState.Error -> {
-                errorMessage = (updateState as UpdateChecker.UpdateState.Error).message
-                showErrorDialog = true
-            }
-            else -> {
-                Toast.makeText(context, "已是最新版本", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("FFmpeg GUI")
-                        if (updateState is UpdateChecker.UpdateState.Checking) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp
-                            )
-                        }
-                    }
-                },
+                title = { Text("FFmpeg GUI") },
                 actions = {
                     // 右上角的关于按钮
                     IconButton(onClick = {
@@ -187,7 +140,8 @@ fun FFmpegApp() {
                     BottomNavItem("历史", "history", Icons.Default.History, Icons.Outlined.History),
                     BottomNavItem("视频", "video", Icons.Default.VideoLibrary, Icons.Outlined.VideoLibrary),
                     BottomNavItem("音频", "audio", Icons.Default.Audiotrack, Icons.Outlined.Audiotrack),
-                    BottomNavItem("图像", "image", Icons.Default.Image, Icons.Outlined.Image)
+                    BottomNavItem("图像", "image", Icons.Default.Image, Icons.Outlined.Image),
+                    //BottomNavItem("高级", "advanced", Icons.Default.Terminal, Icons.Outlined.Terminal)
                 )
 
                 tabs.forEach { tab ->
@@ -195,7 +149,8 @@ fun FFmpegApp() {
                         selected = currentRoute == tab.route ||
                                 (tab.route == "video" && (currentRoute?.startsWith("video/") == true)) ||
                                 (tab.route == "audio" && (currentRoute?.startsWith("audio/") == true)) ||
-                                (tab.route == "image" && (currentRoute?.startsWith("image/") == true)),
+                                (tab.route == "image" && (currentRoute?.startsWith("image/") == true)),// ||
+                                //(tab.route == "advanced" && (currentRoute?.startsWith("advanced/") == true)),
                         onClick = {
                             navController.navigate(tab.route) {
                                 popUpTo(navController.graph.startDestinationId)
@@ -208,7 +163,8 @@ fun FFmpegApp() {
                                     if (currentRoute == tab.route ||
                                         (tab.route == "video" && currentRoute?.startsWith("video/") == true) ||
                                         (tab.route == "audio" && currentRoute?.startsWith("audio/") == true) ||
-                                        (tab.route == "image" && currentRoute?.startsWith("image/") == true)
+                                        (tab.route == "image" && currentRoute?.startsWith("image/") == true) //||
+                                        //(tab.route == "advanced" && currentRoute?.startsWith("advanced/") == true)
                                     ) tab.selectedIcon else tab.unselectedIcon,
                                     contentDescription = tab.title
                                 )
@@ -261,6 +217,15 @@ fun FFmpegApp() {
                     )
                 }
 
+                // 高级功能主界面
+//                composable("advanced") {
+//                    CommandScreen(
+//                        navController = navController,
+//                        onBack = { navController.popBackStack() },
+//                        viewModel = viewModel
+//                    )
+//                }
+
                 // 视频转换界面（二级页面）
                 composable("video/convert") {
                     VideoConvertScreen(
@@ -277,14 +242,6 @@ fun FFmpegApp() {
                         viewModel = viewModel
                     )
                 }
-
-//                composable("video/frameextract") {
-//                    FrameExtractScreen(
-//                        navController = navController,
-//                        onBack = { navController.popBackStack() },
-//                        viewModel = viewModel
-//                    )
-//                }
 
                 // 音频提取界面（二级页面）
                 composable("video/extract") {
@@ -316,8 +273,7 @@ fun FFmpegApp() {
                 // 关于界面
                 composable("about") {
                     AboutScreen(
-                        //onBack = { navController.popBackStack() }
-                        onBack = {navController.navigate("history")}
+                        onBack = { navController.navigate("history") }
                     )
                 }
 
@@ -336,35 +292,7 @@ fun FFmpegApp() {
             }
         }
     }
-
-    // 更新可用对话框
-    if (showUpdateDialog && updateInfo != null) {
-        UpdateDialog(
-            updateInfo = updateInfo!!,
-            onDismiss = {
-                showUpdateDialog = false
-                UpdateChecker.resetState()
-            }
-        )
-    }
-
-    // 更新错误对话框
-    if (showErrorDialog) {
-        UpdateErrorDialog(
-            message = errorMessage,
-            onDismiss = {
-                showErrorDialog = false
-                UpdateChecker.resetState()
-            },
-            onRetry = {
-                showErrorDialog = false
-                UpdateChecker.checkForUpdates()
-            }
-        )
-    }
 }
-
-
 
 // 视频功能数据类
 data class VideoFeature(
@@ -384,8 +312,6 @@ fun VideoMainScreen(
         AudioFeature("extract", "音频提取", Icons.Default.Audiotrack, "video/extract"),
         VideoFeature("convert", "视频转换", Icons.Default.VideoLibrary, "video/convert"),
         VideoFeature("gifconvert", "视频转GIF", Icons.Default.Movie, "video/gifconvert"),
-        //VideoFeature("frameextract", "视频帧提取", Icons.Default.PhotoLibrary, "video/frameextract")
-        // 可以在这里添加更多视频功能
     )
 
     FeatureListScreen(
@@ -436,7 +362,6 @@ fun ImageMainScreen(
 ) {
     val features = listOf(
         ImageFeature("convert", "图像转换", Icons.Default.Image, "image/convert")
-        // 可以在这里添加更多图像功能
     )
 
     FeatureListScreen(
@@ -450,7 +375,7 @@ fun ImageMainScreen(
 @Composable
 fun FeatureListScreen(
     title: String,
-    features: List<Any>, // 使用Any类型接受不同的功能类
+    features: List<Any>,
     navController: androidx.navigation.NavController
 ) {
     Column(

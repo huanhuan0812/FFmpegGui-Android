@@ -27,11 +27,13 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.outlined.Audiotrack
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
@@ -139,7 +141,7 @@ fun FFmpegApp() {
                     BottomNavItem("视频", "video", Icons.Default.VideoLibrary, Icons.Outlined.VideoLibrary),
                     BottomNavItem("音频", "audio", Icons.Default.Audiotrack, Icons.Outlined.Audiotrack),
                     BottomNavItem("图像", "image", Icons.Default.Image, Icons.Outlined.Image),
-                    //BottomNavItem("高级", "advanced", Icons.Default.Terminal, Icons.Outlined.Terminal)
+                    BottomNavItem("高级", "advanced", Icons.Default.Terminal, Icons.Outlined.Terminal)
                 )
 
                 tabs.forEach { tab ->
@@ -161,8 +163,8 @@ fun FFmpegApp() {
                                     if (currentRoute == tab.route ||
                                         (tab.route == "video" && currentRoute?.startsWith("video/") == true) ||
                                         (tab.route == "audio" && currentRoute?.startsWith("audio/") == true) ||
-                                        (tab.route == "image" && currentRoute?.startsWith("image/") == true) //||
-                                        //(tab.route == "advanced" && currentRoute?.startsWith("advanced/") == true)
+                                        (tab.route == "image" && currentRoute?.startsWith("image/") == true) ||
+                                        (tab.route == "advanced" && currentRoute?.startsWith("advanced/") == true)
                                     ) tab.selectedIcon else tab.unselectedIcon,
                                     contentDescription = tab.title
                                 )
@@ -216,13 +218,13 @@ fun FFmpegApp() {
                 }
 
                 // 高级功能主界面
-//                composable("advanced") {
-//                    CommandScreen(
-//                        navController = navController,
-//                        onBack = { navController.popBackStack() },
-//                        viewModel = viewModel
-//                    )
-//                }
+                composable("advanced") {
+                    CommandScreen(
+                        navController = navController,
+                        onBack = { navController.popBackStack() },
+                        viewModel = viewModel
+                    )
+                }
 
                 // 视频转换界面（二级页面）
                 composable("video/convert") {

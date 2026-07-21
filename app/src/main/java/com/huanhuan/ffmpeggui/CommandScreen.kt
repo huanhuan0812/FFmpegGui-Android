@@ -66,6 +66,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun FFmpegDemoTheme(
@@ -134,7 +135,7 @@ fun CommandScreen(
     // 当结果更新时自动滚动到底部
     LaunchedEffect(executionResult) {
         if (isExecuting) {
-            kotlinx.coroutines.delay(100)
+            kotlinx.coroutines.delay(100.milliseconds)
             resultScrollState.animateScrollTo(resultScrollState.maxValue)
         }
     }

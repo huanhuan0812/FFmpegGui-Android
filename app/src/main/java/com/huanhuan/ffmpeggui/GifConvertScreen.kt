@@ -176,17 +176,9 @@ fun VideoToGifScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("视频转GIF") }
-            )
-        }
-    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .verticalScroll(scrollState)
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -620,5 +612,5 @@ fun VideoToGifScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
-    }
+
 }

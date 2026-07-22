@@ -168,17 +168,9 @@ fun VideoConvertScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("视频格式转换") }
-            )
-        }
-    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .verticalScroll(scrollState) // 添加垂直滚动
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -607,5 +599,4 @@ fun VideoConvertScreen(
             // 添加底部间距，确保滚动时最后一个元素不会被底部导航栏遮挡
             Spacer(modifier = Modifier.height(16.dp))
         }
-    }
 }

@@ -150,17 +150,9 @@ fun ImageConvertScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("图片格式转换") }
-            )
-        }
-    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .verticalScroll(scrollState)
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -549,5 +541,5 @@ fun ImageConvertScreen(
                 }
             }
         }
-    }
+
 }

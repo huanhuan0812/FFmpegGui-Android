@@ -143,17 +143,9 @@ fun AudioExtractScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("音频提取") }
-            )
-        }
-    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .verticalScroll(scrollState)
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -347,5 +339,5 @@ fun AudioExtractScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
-    }
+
 }

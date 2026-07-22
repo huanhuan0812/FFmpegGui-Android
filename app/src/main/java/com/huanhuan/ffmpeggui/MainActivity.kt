@@ -64,7 +64,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.huanhuan.ffmpeggui.ui.theme.FFmpegGuiTheme
 
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -105,28 +104,72 @@ fun FFmpegApp() {
         }
     }
 
+    // 获取当前页面标题
+    val screenTitle = when {
+        currentRoute == "history" -> "历史记录"
+        currentRoute == "video" -> "视频处理"
+        currentRoute == "audio" -> "音频处理"
+        currentRoute == "image" -> "图像处理"
+        currentRoute == "advanced" -> "高级命令"
+        currentRoute == "about" -> "关于"
+        currentRoute?.startsWith("video/") == true -> {
+            when (currentRoute) {
+                "video/convert" -> "视频转换"
+                "video/gifconvert" -> "视频转GIF"
+                "video/extract" -> "音频提取"
+                else -> "视频处理"
+            }
+        }
+        currentRoute?.startsWith("audio/") == true -> {
+            when (currentRoute) {
+                "audio/convert" -> "音频转换"
+                else -> "音频处理"
+            }
+        }
+        currentRoute?.startsWith("image/") == true -> {
+            when (currentRoute) {
+                "image/convert" -> "图像转换"
+                else -> "图像处理"
+            }
+        }
+        currentRoute?.startsWith("result/") == true -> "处理结果"
+        else -> "FFmpeg GUI"
+    }
+
+    // 判断是否显示返回按钮
+    val showBackButton = currentRoute != "history" &&
+            currentRoute != "video" &&
+            currentRoute != "audio" &&
+            currentRoute != "image" &&
+            currentRoute != "advanced" &&
+            currentRoute !in listOf("about", null)
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("FFmpeg GUI") },
+                title = { Text(screenTitle) },
                 actions = {
-                    // 右上角的关于按钮
-                    IconButton(onClick = {
-                        navController.navigate("about")
-                    }) {
-                        Icon(
-                            if (currentRoute == "about") Icons.Default.Info else Icons.Outlined.Info,
-                            contentDescription = "关于"
-                        )
+                    // 只在主页面显示关于按钮
+                    if (currentRoute in listOf("history", "video", "audio", "image", "advanced")) {
+                        IconButton(onClick = {
+                            navController.navigate("about")
+                        }) {
+                            Icon(
+                                if (currentRoute == "about") Icons.Default.Info else Icons.Outlined.Info,
+                                contentDescription = "关于"
+                            )
+                        }
                     }
                 },
                 navigationIcon = {
-                    // 如果不是主界面，显示返回按钮
-                    if (currentRoute != "history" &&
-                        currentRoute != "video" &&
-                        currentRoute != "audio" &&
-                        currentRoute != "image") {
-                        IconButton(onClick = { navController.popBackStack() }) {
+                    if (showBackButton) {
+                        IconButton(onClick = {
+                            if (currentRoute == "about") {
+                                navController.navigate("history")
+                            } else {
+                                navController.popBackStack()
+                            }
+                        }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                         }
                     }
@@ -149,8 +192,7 @@ fun FFmpegApp() {
                         selected = currentRoute == tab.route ||
                                 (tab.route == "video" && (currentRoute?.startsWith("video/") == true)) ||
                                 (tab.route == "audio" && (currentRoute?.startsWith("audio/") == true)) ||
-                                (tab.route == "image" && (currentRoute?.startsWith("image/") == true)),// ||
-                                //(tab.route == "advanced" && (currentRoute?.startsWith("advanced/") == true)),
+                                (tab.route == "image" && (currentRoute?.startsWith("image/") == true)),
                         onClick = {
                             navController.navigate(tab.route) {
                                 popUpTo(navController.graph.startDestinationId)

@@ -40,9 +40,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -67,25 +65,22 @@ import java.io.File
 
 private const val TAG = "CommandScreen"
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CommandScreen(
     navController: NavController,
     onBack: () -> Unit,
     viewModel: FFmpegViewModel = viewModel()
 ) {
-    //  移除预填内容，改为空字符串
     var arguments by remember { mutableStateOf("") }
     var inputFilePath by remember { mutableStateOf<String?>(null) }
     var inputFileName by remember { mutableStateOf("") }
-    var outputFileName by remember { mutableStateOf("") } //  移除默认值
+    var outputFileName by remember { mutableStateOf("") }
     val executionResult by viewModel.executionResult.collectAsState()
     val isExecuting by viewModel.isExecuting.collectAsState()
     val context = LocalContext.current
 
     val resultScrollState = rememberScrollState()
 
-    //  防止重复跳转
     var hasNavigated by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -97,7 +92,6 @@ fun CommandScreen(
         }
     }
 
-    // 文件选择器 - 复制到应用私有目录
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -109,10 +103,8 @@ fun CommandScreen(
                 return@rememberLauncherForActivityResult
             }
 
-            //  重置跳转状态
             hasNavigated = false
 
-            // 复制到应用私有目录（使用 FileUtils）
             val filePath = getPathFromUri(context, uri)
             Log.d(TAG, "获取到的文件路径: $filePath")
 
@@ -142,14 +134,12 @@ fun CommandScreen(
                 return@rememberLauncherForActivityResult
             }
 
-            // 关键：设置文件权限
             file.setReadable(true, false)
             file.setWritable(true, false)
 
             inputFilePath = filePath
             inputFileName = file.name
 
-            //  根据输入文件名生成默认输出文件名（但用户可以修改）
             val baseName = file.name.substringBeforeLast(".")
             val extension = file.name.substringAfterLast(".", "")
             outputFileName = if (extension.isNotEmpty()) {
@@ -177,12 +167,9 @@ fun CommandScreen(
         try {
             val permissions = mutableListOf<String>()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                //  Android 13+ 使用更通用的权限
                 permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
                 permissions.add(Manifest.permission.READ_MEDIA_VIDEO)
                 permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
-                // 对于其他文件类型，Android 13+ 仍需 MANAGE_EXTERNAL_STORAGE 或使用 SAF
-                // 但 GetContent() 实际上不需要 READ_MEDIA_* 权限，因为它是通过 SAF 选择的
             } else {
                 permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
                 if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
@@ -190,7 +177,6 @@ fun CommandScreen(
                 }
             }
 
-            //  实际上 GetContent() 不需要存储权限，但保留以兼容旧版本
             val missingPermissions = permissions.filter {
                 ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
             }
@@ -204,234 +190,213 @@ fun CommandScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("FFmpeg 命令执行器") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回"
-                        )
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
+    // 移除 Scaffold，直接使用 Column
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp),
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            try {
-                                Log.d(TAG, "打开文件选择器")
-                                //  使用 */* 选择所有文件类型
-                                filePickerLauncher.launch("*/*")
-                            } catch (e: Exception) {
-                                Log.e(TAG, "打开文件选择器失败", e)
-                                Toast.makeText(context, "打开文件选择器失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FolderOpen,
-                            contentDescription = "选择输入文件",
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (inputFileName.isNotBlank()) {
-                                inputFileName
-                            } else {
-                                "选择输入文件"
-                            },
-                            maxLines = 1
-                        )
-                    }
-
-                    OutlinedTextField(
-                        value = outputFileName,
-                        onValueChange = { outputFileName = it },
-                        label = { Text("输出文件名") },
-                        modifier = Modifier.weight(1.5f),
-                        singleLine = true,
-                        placeholder = { Text("请输入输出文件名") }, //  添加 placeholder
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.None,
-                            autoCorrectEnabled = false,
-                            keyboardType = KeyboardType.Text,
-                            imeAction = ImeAction.Done
-                        )
-                    )
-                }
-
-                ArgumentsInputCard(
-                    arguments = arguments,
-                    onArgumentsChange = { arguments = it },
-                    inputFileName = inputFileName
-                )
-
-                if (inputFileName.isNotBlank() && arguments.isNotBlank()) {
-                    val fullCommand = buildPreviewCommand(arguments, inputFileName, outputFileName)
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = "📋 完整命令预览",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "ffmpeg $fullCommand",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            if (inputFilePath != null) {
-                                val displayPath = inputFilePath?.take(100) ?: ""
-                                val isTruncated = (inputFilePath?.length ?: 0) > 100
-                                Text(
-                                    text = "📁 文件路径: $displayPath${if (isTruncated) "..." else ""}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                ExecutionResultCard(
-                    executionResult = executionResult,
-                    onClear = {
-                        viewModel.clearResult()
-                        CoroutineScope(Dispatchers.Main).launch {
-                            resultScrollState.scrollTo(0)
-                        }
-                    },
-                    scrollState = resultScrollState
-                )
-            }
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                ExecuteButton(
+                OutlinedButton(
                     onClick = {
                         try {
-                            if (arguments.isNotBlank() && inputFilePath != null) {
-                                val inputFile = File(inputFilePath!!)
-                                if (!inputFile.exists()) {
-                                    Toast.makeText(context, "输入文件不存在，请重新选择", Toast.LENGTH_SHORT).show()
-                                    inputFilePath = null
-                                    inputFileName = ""
-                                    return@ExecuteButton
-                                }
+                            Log.d(TAG, "打开文件选择器")
+                            filePickerLauncher.launch("*/*")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "打开文件选择器失败", e)
+                            Toast.makeText(context, "打开文件选择器失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FolderOpen,
+                        contentDescription = "选择输入文件",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (inputFileName.isNotBlank()) {
+                            inputFileName
+                        } else {
+                            "选择输入文件"
+                        },
+                        maxLines = 1
+                    )
+                }
 
-                                //  输出目录保持不变
-                                val outputDir = File(context.getExternalFilesDir(null), "FFmpegOutput")
-                                if (!outputDir.exists()) {
-                                    outputDir.mkdirs()
-                                }
+                OutlinedTextField(
+                    value = outputFileName,
+                    onValueChange = { outputFileName = it },
+                    label = { Text("输出文件名") },
+                    modifier = Modifier.weight(1.5f),
+                    singleLine = true,
+                    placeholder = { Text("请输入输出文件名") },
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.None,
+                        autoCorrectEnabled = false,
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Done
+                    )
+                )
+            }
 
-                                //  如果用户没有指定输出文件名，使用默认名称
-                                val finalOutputName = if (outputFileName.isBlank()) {
-                                    val baseName = inputFile.name.substringBeforeLast(".")
-                                    val extension = inputFile.name.substringAfterLast(".", "")
-                                    if (extension.isNotEmpty()) {
-                                        "${baseName}_output.$extension"
-                                    } else {
-                                        "${baseName}_output"
-                                    }
+            ArgumentsInputCard(
+                arguments = arguments,
+                onArgumentsChange = { arguments = it },
+                inputFileName = inputFileName
+            )
+
+            if (inputFileName.isNotBlank() && arguments.isNotBlank()) {
+                val fullCommand = buildPreviewCommand(arguments, inputFileName, outputFileName)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "📋 完整命令预览",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "ffmpeg $fullCommand",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (inputFilePath != null) {
+                            val displayPath = inputFilePath?.take(100) ?: ""
+                            val isTruncated = (inputFilePath?.length ?: 0) > 100
+                            Text(
+                                text = "📁 文件路径: $displayPath${if (isTruncated) "..." else ""}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            ExecutionResultCard(
+                executionResult = executionResult,
+                onClear = {
+                    viewModel.clearResult()
+                    CoroutineScope(Dispatchers.Main).launch {
+                        resultScrollState.scrollTo(0)
+                    }
+                },
+                scrollState = resultScrollState
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ExecuteButton(
+                onClick = {
+                    try {
+                        if (arguments.isNotBlank() && inputFilePath != null) {
+                            val inputFile = File(inputFilePath!!)
+                            if (!inputFile.exists()) {
+                                Toast.makeText(context, "输入文件不存在，请重新选择", Toast.LENGTH_SHORT).show()
+                                inputFilePath = null
+                                inputFileName = ""
+                                return@ExecuteButton
+                            }
+
+                            val outputDir = File(context.getExternalFilesDir(null), "FFmpegOutput")
+                            if (!outputDir.exists()) {
+                                outputDir.mkdirs()
+                            }
+
+                            val finalOutputName = if (outputFileName.isBlank()) {
+                                val baseName = inputFile.name.substringBeforeLast(".")
+                                val extension = inputFile.name.substringAfterLast(".", "")
+                                if (extension.isNotEmpty()) {
+                                    "${baseName}_output.$extension"
                                 } else {
-                                    outputFileName
+                                    "${baseName}_output"
                                 }
+                            } else {
+                                outputFileName
+                            }
 
-                                val outputPath = File(outputDir, finalOutputName).absolutePath
+                            val outputPath = File(outputDir, finalOutputName).absolutePath
 
-                                //  构建完整命令
-                                val fullCommand = buildFullCommand(arguments, inputFilePath!!, outputPath)
-                                Log.d(TAG, "执行命令: $fullCommand")
+                            val fullCommand = buildFullCommand(arguments, inputFilePath!!, outputPath)
+                            Log.d(TAG, "执行命令: $fullCommand")
 
-                                //  在回调中处理跳转
-                                viewModel.executeCommandWithCallback(
-                                    command = fullCommand,
-                                    onComplete = { success, message ->
-                                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                            viewModel.executeCommandWithCallback(
+                                command = fullCommand,
+                                onComplete = { success, message ->
+                                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
 
-                                        if (success) {
-                                            if (!hasNavigated) {
-                                                hasNavigated = true
-                                                try {
-                                                    val encodedPath = Uri.encode(outputPath)
-                                                    navController.navigate("result/$encodedPath") {
-                                                        launchSingleTop = true
-                                                        popUpTo("command_screen") {
-                                                            inclusive = false
-                                                        }
+                                    if (success) {
+                                        if (!hasNavigated) {
+                                            hasNavigated = true
+                                            try {
+                                                val encodedPath = Uri.encode(outputPath)
+                                                navController.navigate("result/$encodedPath") {
+                                                    launchSingleTop = true
+                                                    popUpTo("command_screen") {
+                                                        inclusive = false
                                                     }
-                                                } catch (e: Exception) {
-                                                    Log.e(TAG, "跳转失败", e)
-                                                    Toast.makeText(context, "跳转失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                                                    hasNavigated = false
                                                 }
+                                            } catch (e: Exception) {
+                                                Log.e(TAG, "跳转失败", e)
+                                                Toast.makeText(context, "跳转失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                hasNavigated = false
                                             }
                                         }
                                     }
-                                )
-                            } else if (inputFilePath == null) {
-                                Toast.makeText(context, "请先选择输入文件", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, "请输入 FFmpeg 参数", Toast.LENGTH_SHORT).show()
-                            }
+                                }
+                            )
+                        } else if (inputFilePath == null) {
+                            Toast.makeText(context, "请先选择输入文件", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "请输入 FFmpeg 参数", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "执行命令失败", e)
+                        Toast.makeText(context, "执行失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                isExecuting = isExecuting,
+                enabled = arguments.isNotBlank() && inputFilePath != null && !isExecuting,
+                modifier = Modifier.weight(1f)
+            )
+
+            if (isExecuting) {
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            viewModel.cancelExecution()
+                            Toast.makeText(context, "正在取消...", Toast.LENGTH_SHORT).show()
                         } catch (e: Exception) {
-                            Log.e(TAG, "执行命令失败", e)
-                            Toast.makeText(context, "执行失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                            Log.e(TAG, "取消执行失败", e)
                         }
                     },
-                    isExecuting = isExecuting,
-                    enabled = arguments.isNotBlank() && inputFilePath != null && !isExecuting,
-                    modifier = Modifier.weight(1f)
-                )
-
-                if (isExecuting) {
-                    OutlinedButton(
-                        onClick = {
-                            try {
-                                viewModel.cancelExecution()
-                                Toast.makeText(context, "正在取消...", Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) {
-                                Log.e(TAG, "取消执行失败", e)
-                            }
-                        },
-                        modifier = Modifier.weight(0.5f),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Text("取消")
-                    }
+                    modifier = Modifier.weight(0.5f),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("取消")
                 }
             }
         }
@@ -443,7 +408,6 @@ private fun buildPreviewCommand(arguments: String, inputFileName: String, output
     val cleanOutputFileName = if (outputFileName.isNotBlank()) {
         outputFileName.trim('"')
     } else {
-        //  使用默认输出名
         val baseName = inputFileName.substringBeforeLast(".")
         val extension = inputFileName.substringAfterLast(".", "")
         if (extension.isNotEmpty()) {
@@ -466,7 +430,6 @@ private fun buildPreviewCommand(arguments: String, inputFileName: String, output
 
 // 构建实际执行命令 - 使用文件路径
 private fun buildFullCommand(arguments: String, inputFilePath: String, outputPath: String): String {
-    // 使用双引号包裹路径（支持空格等特殊字符）
     val inputPath = "\"$inputFilePath\""
     val outputPathQuoted = "\"$outputPath\""
 

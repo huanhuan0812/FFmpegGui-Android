@@ -66,10 +66,8 @@ import com.huanhuan.ffmpeggui.ui.theme.DarkColorScheme
 import com.huanhuan.ffmpeggui.ui.theme.LightColorScheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
-import java.io.FileOutputStream
 
 private const val TAG = "CommandScreen"
 

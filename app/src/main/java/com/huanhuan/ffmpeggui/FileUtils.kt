@@ -92,7 +92,7 @@ fun getFileName(context: Context, uri: Uri): String? {
         name = uri.path
         val cut = name?.lastIndexOf('/')
         if (cut != -1 && cut != null) {
-            name = name?.substring(cut + 1)
+            name = name.substring(cut + 1)
         }
     }
 

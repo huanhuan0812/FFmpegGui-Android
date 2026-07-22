@@ -66,7 +66,7 @@ fun History.toConversionTask(): ConversionTask {
         outputPath = this.path,
         type = try {
             this.name.substringBefore(" - ")
-        } catch (e: Exception) {
+        } catch ( _ : Exception) {
             "未知类型"
         },
         status = "完成",
@@ -201,7 +201,7 @@ class FFmpegViewModel : ViewModel() {
                 if (totalDurationMs > 0) {
                     progress = (currentTimeMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 0.99f)
                 }
-            } catch (e: NumberFormatException) {
+            } catch ( _ : NumberFormatException) {
                 // 忽略
             }
         }
@@ -215,7 +215,7 @@ class FFmpegViewModel : ViewModel() {
                 if (estimatedTotalFrames > 0 && frameNumber > 0) {
                     progress = (frameNumber.toFloat() / estimatedTotalFrames.toFloat()).coerceIn(0f, 0.99f)
                 }
-            } catch (e: NumberFormatException) {
+            } catch ( _ : NumberFormatException) {
                 // 忽略
             }
         }
@@ -227,7 +227,7 @@ class FFmpegViewModel : ViewModel() {
             try {
                 val percent = it.groupValues[1].toFloat()
                 progress = (percent / 100f).coerceIn(0f, 0.99f)
-            } catch (e: NumberFormatException) {
+            } catch (_: NumberFormatException) {
                 // 忽略
             }
         }
@@ -271,46 +271,6 @@ class FFmpegViewModel : ViewModel() {
             command = "-i \"$inputPath\" -q:a 0 -map a -y \"$outputPath\"",
             taskId = UUID.randomUUID().toString(),
             type = "音频提取",
-            inputPath = inputPath,
-            outputPath = outputPath,
-            onComplete = onComplete
-        )
-    }
-
-    fun convertAudio(
-        inputPath: String,
-        outputPath: String,
-        format: String,
-        onComplete: (Boolean, String) -> Unit
-    ) {
-        executeFFmpegCommand(
-            command = "-i \"$inputPath\" -acodec ${getAudioCodec(format)} -y \"$outputPath\"",
-            taskId = UUID.randomUUID().toString(),
-            type = "音频转换",
-            inputPath = inputPath,
-            outputPath = outputPath,
-            onComplete = onComplete
-        )
-    }
-
-    fun convertVideo(
-        inputPath: String,
-        outputPath: String,
-        format: String,
-        onComplete: (Boolean, String) -> Unit
-    ) {
-        val codec = when (format.lowercase(Locale.getDefault())) {
-            "mp4" -> "libx264"
-            "avi" -> "mpeg4"
-            "mkv" -> "libx265"
-            "mov" -> "libx264"
-            else -> "libx264"
-        }
-
-        executeFFmpegCommand(
-            command = "-i \"$inputPath\" -c:v $codec -preset ultrafast -y \"$outputPath\"",
-            taskId = UUID.randomUUID().toString(),
-            type = "视频转换",
             inputPath = inputPath,
             outputPath = outputPath,
             onComplete = onComplete
@@ -701,38 +661,11 @@ class FFmpegViewModel : ViewModel() {
         }
     }
 
-    fun clearHistory() {
-        viewModelScope.launch {
-            try {
-                database?.historyDao()?.deleteAll()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-        historyTasks.clear()
-    }
-
     override fun onCleared() {
         super.onCleared()
         cancelCurrentProcessing()
         com.arthenica.ffmpegkit.FFmpegKitConfig.enableStatisticsCallback(null)
         com.arthenica.ffmpegkit.FFmpegKitConfig.enableLogCallback(null)
-    }
-
-    fun executeImageConvert(
-        inputPath: String,
-        outputPath: String,
-        command: String,
-        onComplete: (Boolean, String) -> Unit
-    ) {
-        executeFFmpegCommand(
-            command = command,
-            taskId = UUID.randomUUID().toString(),
-            type = "图片转换",
-            inputPath = inputPath,
-            outputPath = outputPath,
-            onComplete = onComplete
-        )
     }
 
     fun convertImage(
@@ -868,24 +801,6 @@ class FFmpegViewModel : ViewModel() {
         )
     }
 
-    fun convertImageSimple(
-        inputPath: String,
-        outputPath: String,
-        format: String,
-        onComplete: (Boolean, String) -> Unit
-    ) {
-        convertImage(
-            inputPath = inputPath,
-            outputPath = outputPath,
-            format = format,
-            quality = 90,
-            width = 0,
-            height = 0,
-            maintainAspectRatio = true,
-            onComplete = onComplete
-        )
-    }
-
     fun convertVideoToGif(
         inputPath: String,
         outputPath: String,
@@ -937,93 +852,6 @@ class FFmpegViewModel : ViewModel() {
     // ============================================================
     // 🔧 核心修复：executeCommand 方法 - 使用 executeAsync
     // ============================================================
-    fun executeCommand(command: String) {
-        viewModelScope.launch {
-            _isExecuting.value = true
-            _executionResult.value = "正在执行命令: $command\n\n"
-
-            try {
-                // 创建日志回调来实现实时输出
-                val logCallback = LogCallback { log ->
-                    viewModelScope.launch(Dispatchers.Main) {
-                        val message = log.message ?: ""
-                        if (message.isNotBlank()) {
-                            _executionResult.update { currentResult ->
-                                currentResult + message
-                            }
-                        }
-                    }
-                }
-
-                withContext(Dispatchers.IO) {
-                    // 🔧 使用 executeAsync 直接传入完整命令字符串
-                    // FFmpegKit 内部会正确处理带引号的路径
-                    currentSession = FFmpegKit.executeAsync(
-                        command,
-                        { session ->
-                            viewModelScope.launch(Dispatchers.Main) {
-                                handleSessionResult(session)
-                            }
-                        },
-                        logCallback,
-                        null // 统计回调，这里不需要
-                    )
-                }
-
-            } catch (e: Exception) {
-                _executionResult.update { it + "\n❌ 执行异常: ${e.message}" }
-                _isExecuting.value = false
-            }
-        }
-    }
-
-    private fun handleSessionResult(session: FFmpegSession) {
-        val returnCode = session.returnCode
-        val output = StringBuilder()
-
-        when {
-            ReturnCode.isSuccess(returnCode) -> {
-                output.append("\n✅ 命令执行成功\n")
-            }
-            ReturnCode.isCancel(returnCode) -> {
-                output.append("\n⚠️ 命令已被取消\n")
-            }
-            else -> {
-                output.append("\n❌ 命令执行失败\n")
-            }
-        }
-
-        val outputLog = session.output
-        if (!outputLog.isNullOrEmpty() && !_executionResult.value.contains(outputLog)) {
-            output.append("\n📋 完整输出:\n")
-            output.append(outputLog)
-        }
-
-        val failStackTrace = session.failStackTrace
-        if (failStackTrace != null) {
-            output.append("\n📊 错误堆栈:\n")
-            output.append(failStackTrace)
-        }
-
-        _executionResult.update { it + output.toString() }
-        _isExecuting.value = false
-        currentSession = null
-    }
-
-    fun clearResult() {
-        _executionResult.value = ""
-    }
-
-    fun cancelExecution() {
-        currentSession?.cancel()
-        _isExecuting.value = false
-    }
-
-    // 在 FFmpegViewModel.kt 中添加
-
-    // ============================================================
-// 🔧 新增：带回调的 executeCommand 方法
-// ============================================================
     fun executeCommandWithCallback(
         command: String,
         onComplete: (Boolean, String) -> Unit
@@ -1109,5 +937,14 @@ class FFmpegViewModel : ViewModel() {
         currentSession = null
 
         return isSuccess
+    }
+
+    fun clearResult() {
+        _executionResult.value = ""
+    }
+
+    fun cancelExecution() {
+        currentSession?.cancel()
+        _isExecuting.value = false
     }
 }

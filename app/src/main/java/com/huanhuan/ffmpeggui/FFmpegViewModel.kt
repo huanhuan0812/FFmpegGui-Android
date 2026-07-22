@@ -3,6 +3,10 @@ package com.huanhuan.ffmpeggui
 import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -45,36 +49,33 @@ data class ConversionTask(
 
 fun ConversionTask.toHistory(): History {
     return History(
-        id = this.endTime ?: this.startTime,  // 使用task的时间作为主键
-        key = this.id,  // 使用task的id作为key
-        name = "${this.type} - ${File(this.outputPath).name}",  // 生成显示名称
-        path = this.outputPath,  // 保存输出路径
-        timestamp = this.endTime ?: this.startTime,  // 使用结束时间或开始时间
-        createdAt = this.startTime,  // 创建时间
-        size = File(this.outputPath).length().toInt()  // 文件大小
+        id = this.endTime ?: this.startTime,
+        key = this.id,
+        name = "${this.type} - ${File(this.outputPath).name}",
+        path = this.outputPath,
+        timestamp = this.endTime ?: this.startTime,
+        createdAt = this.startTime,
+        size = File(this.outputPath).length().toInt()
     )
 }
 
-// 添加转换函数 - 将History转换为ConversionTask（用于加载历史记录）
-// 修改转换函数 - 将History转换为ConversionTask（添加空值处理）
 fun History.toConversionTask(): ConversionTask {
     return ConversionTask(
         id = this.key,
-        inputPath = "",  // History中没有保存inputPath，可能需要从其他地方获取或留空
+        inputPath = "",
         outputPath = this.path,
         type = try {
-            this.name.substringBefore(" - ")  // 从name中解析type
+            this.name.substringBefore(" - ")
         } catch (e: Exception) {
             "未知类型"
         },
-        status = "完成",  // 默认状态为完成
-        progress = 1f,  // 默认进度100%
+        status = "完成",
+        progress = 1f,
         startTime = this.createdAt,
         endTime = this.timestamp
     )
 }
 
-// 添加处理结果事件类
 sealed class ProcessingEvent {
     data class Completed(val success: Boolean, val message: String, val outputPath: String) : ProcessingEvent()
     object Cancelled : ProcessingEvent()
@@ -85,7 +86,7 @@ class FFmpegViewModel : ViewModel() {
     var isProcessing by mutableStateOf(false)
         private set
 
-    var progress by mutableStateOf(0f)
+    var progress by mutableFloatStateOf(0f)
         private set
 
     var currentCommand by mutableStateOf("")
@@ -96,43 +97,34 @@ class FFmpegViewModel : ViewModel() {
 
     val historyTasks = mutableStateListOf<ConversionTask>()
 
-    // 使用 SharedFlow 发送处理结果
     private val _processingEvents = MutableSharedFlow<ProcessingEvent>()
     val processingEvents: SharedFlow<ProcessingEvent> = _processingEvents.asSharedFlow()
 
-    // 当前正在执行的会话
     private var currentSession: FFmpegSession? = null
-
-    // 当前任务是否被取消
     private var isCancelled by mutableStateOf(false)
-
-    // 用于安全处理回调的 Job
     private var processingJob: Job? = null
-
-    // 媒体总时长（毫秒）
-    private var totalDurationMs by mutableStateOf(0L)
-
-    // 当前处理时间（毫秒）
-    private var currentTimeMs: Double by mutableStateOf(0.0)
-
-    // 估算的总帧数
-    private var estimatedTotalFrames by mutableStateOf(0)
+    private var totalDurationMs by mutableLongStateOf(0L)
+    private var currentTimeMs: Double by mutableDoubleStateOf(0.0)
+    private var estimatedTotalFrames by mutableIntStateOf(0)
 
     private var database: HistoryDatabase? = null
 
+    // 执行命令相关的状态
+    private val _executionResult = MutableStateFlow("")
+    val executionResult: StateFlow<String> = _executionResult.asStateFlow()
+
+    private val _isExecuting = MutableStateFlow(false)
+    val isExecuting: StateFlow<Boolean> = _isExecuting.asStateFlow()
+
     init {
-        // 只在 ViewModel 初始化时设置一次回调
         setupFFmpegCallbacks()
     }
 
-    // 添加初始化方法
     fun initDatabase(context: Context) {
         try {
             Log.d("FFmpegViewModel", "开始初始化数据库")
             this.database = HistoryDatabase.getInstance(context)
             Log.d("FFmpegViewModel", "数据库实例获取成功")
-
-            // 初始化时加载历史记录
             loadHistoryTasks()
         } catch (e: Exception) {
             Log.e("FFmpegViewModel", "数据库初始化失败", e)
@@ -140,19 +132,14 @@ class FFmpegViewModel : ViewModel() {
         }
     }
 
-    // 从数据库加载历史记录
-    // 从数据库加载历史记录
     private fun loadHistoryTasks() {
         viewModelScope.launch {
             try {
                 Log.d("FFmpegViewModel", "开始加载历史记录")
                 database?.historyDao()?.getAllHistories()?.collect { histories ->
                     Log.d("FFmpegViewModel", "获取到 ${histories.size} 条历史记录")
-                    // 清空当前列表
                     historyTasks.clear()
-                    // 将History转换为ConversionTask并添加到列表
                     historyTasks.addAll(histories.map {
-                        Log.d("FFmpegViewModel", "转换历史记录: ${it.id}")
                         it.toConversionTask()
                     })
                 }
@@ -167,22 +154,17 @@ class FFmpegViewModel : ViewModel() {
         com.arthenica.ffmpegkit.FFmpegKitConfig.enableStatisticsCallback { statistics ->
             viewModelScope.launch {
                 if (isActive && !isCancelled) {
-                    // 方法1：基于时间计算进度
                     val timeInMilliseconds = statistics.time
                     currentTimeMs = timeInMilliseconds
 
                     if (totalDurationMs > 0) {
-                        // 基于总时长计算真实进度
                         progress = (timeInMilliseconds.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 0.99f)
                     } else {
-                        // 方法2：基于帧数估算进度
                         val frameNumber = statistics.videoFrameNumber
                         if (estimatedTotalFrames > 0 && frameNumber > 0) {
                             progress = (frameNumber.toFloat() / estimatedTotalFrames.toFloat()).coerceIn(0f, 0.99f)
                         } else {
-                            // 方法3：使用帧数百分比显示动画效果（当无法获取真实进度时）
                             if (frameNumber > 0) {
-                                // 使用取模制造动画效果，但保持在合理范围内
                                 progress = ((frameNumber % 100) / 100f) * 0.8f + 0.1f
                             }
                         }
@@ -194,11 +176,8 @@ class FFmpegViewModel : ViewModel() {
         com.arthenica.ffmpegkit.FFmpegKitConfig.enableLogCallback { log ->
             viewModelScope.launch {
                 if (isActive && log != null && !isCancelled) {
-                    // 从日志中解析更精确的进度信息
                     parseProgressFromLog(log.message)
-
                     logOutput += log.message + "\n"
-                    // 限制日志长度
                     if (logOutput.length > 10000) {
                         logOutput = logOutput.takeLast(5000)
                     }
@@ -207,9 +186,7 @@ class FFmpegViewModel : ViewModel() {
         }
     }
 
-    // 从日志中解析进度信息
     private fun parseProgressFromLog(logMessage: String) {
-        // 解析时间格式: time=00:01:23.45
         val timePattern = Regex("time=(\\d{2}):(\\d{2}):(\\d{2}\\.\\d{2})")
         val matchResult = timePattern.find(logMessage)
 
@@ -225,11 +202,10 @@ class FFmpegViewModel : ViewModel() {
                     progress = (currentTimeMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 0.99f)
                 }
             } catch (e: NumberFormatException) {
-                // 忽略解析错误
+                // 忽略
             }
         }
 
-        // 解析帧数信息: frame= 1234
         val framePattern = Regex("frame=\\s*(\\d+)")
         val frameMatch = framePattern.find(logMessage)
 
@@ -240,11 +216,10 @@ class FFmpegViewModel : ViewModel() {
                     progress = (frameNumber.toFloat() / estimatedTotalFrames.toFloat()).coerceIn(0f, 0.99f)
                 }
             } catch (e: NumberFormatException) {
-                // 忽略解析错误
+                // 忽略
             }
         }
 
-        // 解析进度百分比: 比如 "progress=35.2%"
         val percentPattern = Regex("progress=(\\d+\\.?\\d*)%")
         val percentMatch = percentPattern.find(logMessage)
 
@@ -253,38 +228,24 @@ class FFmpegViewModel : ViewModel() {
                 val percent = it.groupValues[1].toFloat()
                 progress = (percent / 100f).coerceIn(0f, 0.99f)
             } catch (e: NumberFormatException) {
-                // 忽略解析错误
+                // 忽略
             }
         }
     }
 
-    // 获取媒体信息（总时长、总帧数等）
     private suspend fun getMediaInfo(filePath: String): Pair<Long, Int> {
         return withContext(Dispatchers.IO) {
             try {
-                // 使用 FFprobe 获取媒体信息
                 val mediaInfoSession = FFprobeKit.getMediaInformation(filePath)
                 val mediaInformation = mediaInfoSession.mediaInformation
-
-                // 获取总时长（秒）
-                val durationStr = mediaInformation?.getDuration()
+                val durationStr = mediaInformation?.duration
                 val duration = durationStr?.toDoubleOrNull()?.times(1000)?.toLong() ?: 0L
 
-                // 估算总帧数（基于时长和典型帧率）
-                val format = mediaInformation?.getFilename()
                 var totalFrames = 0
-
-                // 尝试获取视频流信息
                 val streams = mediaInformation?.streams
                 streams?.firstOrNull { it.type == "video" }?.let { videoStream ->
-                    //val frameRateStr = videoStream.getStringAttribute("r_frame_rate")
                     val frameRateStr = videoStream.realFrameRate
-                    //val nbFramesStr = videoStream.getStringAttribute("nb_frames")
-
-                    //totalFrames = nbFramesStr?.toIntOrNull() ?: 0
-
-                    if (/*totalFrames == 0 &&*/ duration > 0 && frameRateStr != null) {
-                        // 从帧率估算
+                    if (duration > 0 && frameRateStr != null) {
                         val frameRateParts = frameRateStr.split('/')
                         if (frameRateParts.size == 2) {
                             val fps = frameRateParts[0].toDouble() / frameRateParts[1].toDouble()
@@ -366,31 +327,25 @@ class FFmpegViewModel : ViewModel() {
         onComplete: (Boolean, String) -> Unit
     ) {
         val codec = getAudioCodec(format)
-
-        // 构建命令列表而不是字符串，避免引号问题
         val commandList = mutableListOf(
             "-i", inputPath,
-            "-y",  // 覆盖输出文件
-            "-vn"  // 无视频
+            "-y",
+            "-vn"
         )
 
-        // 添加音频编码器
         commandList.add("-acodec")
         commandList.add(codec)
 
-        // 添加采样率
         if (sampleRate.isNotBlank()) {
             commandList.add("-ar")
             commandList.add(sampleRate)
         }
 
-        // 添加声道数
         if (channels.isNotBlank()) {
             commandList.add("-ac")
             commandList.add(channels)
         }
 
-        // 添加比特率（如果适用）
         if (bitrate.isNotBlank()) {
             when (format.lowercase(Locale.getDefault())) {
                 "mp3", "aac", "m4a" -> {
@@ -398,40 +353,28 @@ class FFmpegViewModel : ViewModel() {
                     commandList.add(bitrate)
                 }
                 "ogg" -> {
-                    // Opus 编码器特定参数
                     commandList.add("-b:a")
                     commandList.add(bitrate)
-
-                    // Opus 优化参数
                     commandList.add("-compression_level")
-                    commandList.add("10")  // 最高压缩质量
-
-                    // 根据比特率选择应用场景
+                    commandList.add("10")
                     when {
                         bitrate.endsWith("k") && bitrate.substring(0, bitrate.length-1).toIntOrNull()?.let { it <= 96 } == true -> {
-                            // 低比特率时使用语音优化
                             commandList.add("-application")
                             commandList.add("lowdelay")
                         }
                         else -> {
-                            // 高比特率时使用音频优化
                             commandList.add("-application")
                             commandList.add("audio")
                         }
                     }
-
-                    // 设置帧大小（20ms 是标准值）
                     commandList.add("-frame_duration")
                     commandList.add("20")
                 }
-                // flac 和 wav 不需要比特率设置
             }
         }
 
-        // 添加输出路径
         commandList.add(outputPath)
 
-        // 将命令列表转换为字符串用于显示
         val commandString = commandList.joinToString(" ") {
             if (it.contains(" ")) "\"$it\"" else it
         }
@@ -547,7 +490,7 @@ class FFmpegViewModel : ViewModel() {
             "aac" -> "aac"
             "flac" -> "flac"
             "wav" -> "pcm_s16le"
-            "ogg" -> "libopus"  // 从 libvorbis 改为 libopus
+            "ogg" -> "libopus"
             "m4a" -> "aac"
             else -> "copy"
         }
@@ -561,10 +504,8 @@ class FFmpegViewModel : ViewModel() {
         outputPath: String,
         onComplete: (Boolean, String) -> Unit
     ) {
-        // 取消之前的处理
         cancelCurrentProcessing()
 
-        // 重置状态
         isCancelled = false
         isProcessing = true
         progress = 0f
@@ -593,30 +534,24 @@ class FFmpegViewModel : ViewModel() {
             }
         }
 
-        // 在 ViewModelScope 中启动处理
         processingJob = viewModelScope.launch {
             try {
-                // 先获取媒体信息
                 val (duration, totalFrames) = getMediaInfo(inputPath)
                 totalDurationMs = duration
                 estimatedTotalFrames = totalFrames
 
-                // 在 IO 线程执行 FFmpeg 命令
                 val result = withContext(Dispatchers.IO) {
                     currentSession = FFmpegKit.execute(command)
                     currentSession
                 }
 
-                // 检查是否被取消
                 if (isCancelled || !isActive) {
-                    // 更新任务状态
                     val taskIndex = historyTasks.indexOfFirst { it.id == taskId }
                     if (taskIndex >= 0) {
                         historyTasks[taskIndex] = historyTasks[taskIndex].copy(
                             status = "已取消",
                             endTime = System.currentTimeMillis()
                         )
-
                         viewModelScope.launch {
                             try {
                                 database?.historyDao()?.update(historyTasks[taskIndex].toHistory())
@@ -624,7 +559,6 @@ class FFmpegViewModel : ViewModel() {
                                 e.printStackTrace()
                             }
                         }
-
                     }
                     _processingEvents.emit(ProcessingEvent.Cancelled)
                     return@launch
@@ -632,7 +566,6 @@ class FFmpegViewModel : ViewModel() {
 
                 val success = result?.returnCode?.isValueSuccess == true
 
-                // 更新任务状态和进度
                 val taskIndex = historyTasks.indexOfFirst { it.id == taskId }
                 if (taskIndex >= 0) {
                     historyTasks[taskIndex] = historyTasks[taskIndex].copy(
@@ -650,7 +583,6 @@ class FFmpegViewModel : ViewModel() {
                     }
                 }
 
-                // 如果成功，设置进度为100%
                 if (success) {
                     progress = 1f
                 }
@@ -660,12 +592,7 @@ class FFmpegViewModel : ViewModel() {
                 } else {
                     "处理失败: ${result?.returnCode} - ${result?.output}"
                 }
-                //Log-----------------------------------------------------------------------------------Log
-//                if(!success){
-//                    Log.d("FFmpegViewModel", "命令执行失败: $command")
-//                }
 
-                // 发送处理完成事件
                 _processingEvents.emit(
                     ProcessingEvent.Completed(
                         success = success,
@@ -674,13 +601,11 @@ class FFmpegViewModel : ViewModel() {
                     )
                 )
 
-                // 调用回调
                 onComplete(success, message)
 
             } catch (e: Exception) {
                 e.printStackTrace()
 
-                // 更新任务状态为失败
                 val taskIndex = historyTasks.indexOfFirst { it.id == taskId }
                 if (taskIndex >= 0) {
                     historyTasks[taskIndex] = historyTasks[taskIndex].copy(
@@ -707,7 +632,6 @@ class FFmpegViewModel : ViewModel() {
         }
     }
 
-    // 取消当前处理
     fun cancelCurrentProcessing() {
         if (isProcessing) {
             isCancelled = true
@@ -718,9 +642,7 @@ class FFmpegViewModel : ViewModel() {
         }
     }
 
-    // 清理所有历史记录和对应的输出文件
     fun clearAllHistory() {
-        // 删除所有输出文件
         historyTasks.forEach { task ->
             try {
                 val outputFile = File(task.outputPath)
@@ -735,20 +657,16 @@ class FFmpegViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 database?.historyDao()?.deleteAll()
-
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
 
-        // 清空历史列表
         historyTasks.clear()
     }
 
-    // 清理单个历史记录及其对应的输出文件
     fun clearHistoryItem(task: ConversionTask) {
         try {
-            // 删除输出文件
             val outputFile = File(task.outputPath)
             if (outputFile.exists()) {
                 outputFile.delete()
@@ -762,14 +680,12 @@ class FFmpegViewModel : ViewModel() {
                 }
             }
 
-            // 从历史列表中移除
             historyTasks.remove(task)
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    // 清理所有已完成的输出文件（不删除历史记录）
     fun clearCompletedOutputFiles() {
         historyTasks.forEach { task ->
             if (task.status == "完成") {
@@ -786,29 +702,23 @@ class FFmpegViewModel : ViewModel() {
     }
 
     fun clearHistory() {
-
         viewModelScope.launch {
             try {
                 database?.historyDao()?.deleteAll()
-
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
-
         historyTasks.clear()
     }
 
     override fun onCleared() {
         super.onCleared()
-        // ViewModel 销毁时取消所有处理
         cancelCurrentProcessing()
-        // 清除回调
         com.arthenica.ffmpegkit.FFmpegKitConfig.enableStatisticsCallback(null)
         com.arthenica.ffmpegkit.FFmpegKitConfig.enableLogCallback(null)
     }
 
-    // 在 FFmpegViewModel 类中添加
     fun executeImageConvert(
         inputPath: String,
         outputPath: String,
@@ -833,16 +743,15 @@ class FFmpegViewModel : ViewModel() {
         width: Int = 0,
         height: Int = 0,
         maintainAspectRatio: Boolean = true,
-        compressionLevel: Int = 6,  // 用于 PNG 压缩级别 0-9
-        dither: Boolean = true,      // 用于 GIF 抖动
-        colors: Int = 256,           // 用于 GIF 颜色数
-        lossless: Boolean = false,   // 用于 WebP 无损模式
+        compressionLevel: Int = 6,
+        dither: Boolean = true,
+        colors: Int = 256,
+        lossless: Boolean = false,
         onComplete: (Boolean, String) -> Unit
     ) {
         val command = buildString {
             append("-i \"$inputPath\" -y")
 
-            // 尺寸调整
             if (width > 0 || height > 0) {
                 append(" -vf ")
                 when {
@@ -854,59 +763,41 @@ class FFmpegViewModel : ViewModel() {
                         }
                     }
                     width > 0 -> append("\"scale=$width:-2\"")
-                    true -> append("\"scale=-2:$height\"")
+                    else -> append("\"scale=-2:$height\"")
                 }
             }
 
-            // 格式特定参数
             when (format.lowercase(Locale.getDefault())) {
                 "jpg", "jpeg" -> {
-                    // JPEG: 质量 2-31 (2最好,31最差)
                     val jpegQuality = ((100 - quality) / 2).coerceIn(2, 31)
                     append(" -q:v $jpegQuality")
-                    // 使用优化的Huffman编码
                     append(" -huffman optimal")
                 }
-
                 "png" -> {
-                    // PNG: 压缩级别 0-9 (0=无压缩, 9=最大压缩)
                     val pngCompression = compressionLevel.coerceIn(0, 9)
                     append(" -compression_level $pngCompression")
-                    // 使用预测器提高压缩率
                     append(" -pred mixed")
                 }
-
                 "webp" -> {
                     if (lossless) {
-                        // 无损WebP
                         append(" -lossless 1 -quality $quality")
-                        // 压缩方法 0-6 (6最慢但压缩率最高)
                         append(" -method 6")
                     } else {
-                        // 有损WebP
                         append(" -quality $quality")
-                        // 锐化边缘
                         append(" -sharp_yuv 1")
                     }
                 }
-
                 "bmp" -> {
-                    // BMP: 无压缩选项，但可以指定色彩深度
                     append(" -pix_fmt bgr24")
                 }
-
                 "gif" -> {
-                    // GIF 特定参数
                     val paletteGenCmd = if (dither) {
-                        // 使用抖动的调色板
                         "palettegen=stats_mode=single"
                     } else {
                         "palettegen=stats_mode=single:max_colors=$colors"
                     }
 
-                    // 先处理输入，然后应用调色板
                     val filterComplex = if (width > 0 || height > 0) {
-                        // 如果已经有尺寸调整，需要组合滤镜
                         val scale = when {
                             width > 0 && height > 0 -> "scale=$width:$height"
                             width > 0 -> "scale=$width:-2"
@@ -921,68 +812,46 @@ class FFmpegViewModel : ViewModel() {
                     append(" -filter_complex $filterComplex")
                     append(" -map \"[out]\"")
                 }
-
                 "tiff" -> {
-                    // TIFF: 压缩选项
-                    append(" -compression_algo lzw")  // lzw, zip, jpeg, none
+                    append(" -compression_algo lzw")
                     append(" -pix_fmt rgb24")
                 }
-
                 "ico" -> {
-                    // ICO: 可以包含多个尺寸
                     if (width == 0 || height == 0) {
-                        // 默认创建多个常见尺寸
                         append(" -vf \"scale=16:16,scale=32:32,scale=48:48,scale=64:64,scale=128:128,scale=256:256\"")
                     }
                 }
-
                 "heif", "heic" -> {
-                    // HEIF: 高效图像格式
                     append(" -c:v libheif")
                     append(" -quality $quality")
                     if (lossless) {
                         append(" -lossless 1")
                     }
                 }
-
                 "avif" -> {
-                    // AVIF: AV1图像格式
                     append(" -c:v libaom-av1")
-                    append(" -crf ${63 - (quality * 63 / 100)}")  // 0-63, 0最好
+                    append(" -crf ${63 - (quality * 63 / 100)}")
                     append(" -b:v 0")
                     append(" -strict experimental")
                 }
-
                 "jp2", "j2k" -> {
-                    // JPEG2000
                     append(" -c:v jpeg2000")
                     append(" -quality $quality")
                     if (lossless) {
-                        append(" -pred 1")  // 无损预测
+                        append(" -pred 1")
                     }
                 }
-
                 "pdf" -> {
-                    // PDF 输出
                     append(" -c:v pdf")
                     append(" -pix_fmt rgb24")
                 }
-
                 "psd" -> {
-                    // Photoshop 文档
                     append(" -c:v psd")
                     append(" -pix_fmt rgba")
                 }
-
                 "tga" -> {
-                    // Targa
                     append(" -c:v targa")
                     append(" -pix_fmt bgra")
-                }
-
-                "pcx", "pict", "pnm", "pgm", "ppm", "pbm" -> {
-                    // 其他格式使用默认编码器
-                    // 这些格式通常不需要特殊参数
                 }
             }
 
@@ -999,14 +868,12 @@ class FFmpegViewModel : ViewModel() {
         )
     }
 
-    // 添加一个简化的图片转换方法
     fun convertImageSimple(
         inputPath: String,
         outputPath: String,
         format: String,
         onComplete: (Boolean, String) -> Unit
     ) {
-        // 简单转换，使用默认参数
         convertImage(
             inputPath = inputPath,
             outputPath = outputPath,
@@ -1035,7 +902,6 @@ class FFmpegViewModel : ViewModel() {
         val command = buildString {
             append("-i \"$inputPath\" -y")
 
-            // 添加时间裁剪
             if (!startTime.isNullOrBlank()) {
                 append(" -ss $startTime")
             }
@@ -1043,7 +909,6 @@ class FFmpegViewModel : ViewModel() {
                 append(" -t $duration")
             }
 
-            // 简化版滤镜图 - 直接使用palettegen和paletteuse
             val filterComplex = if (useDither) {
                 "fps=$fps,scale=$scale:-1:flags=lanczos,split[split1][split2];[split1]palettegen[pal];[split2][pal]paletteuse=dither=sierra2_4a"
             } else {
@@ -1052,7 +917,6 @@ class FFmpegViewModel : ViewModel() {
 
             append(" -filter_complex \"$filterComplex\"")
 
-            // 设置循环次数
             if (loopCount >= 0) {
                 append(" -loop $loopCount")
             }
@@ -1070,12 +934,9 @@ class FFmpegViewModel : ViewModel() {
         )
     }
 
-    private val _executionResult = MutableStateFlow("")
-    val executionResult: StateFlow<String> = _executionResult.asStateFlow()
-
-    private val _isExecuting = MutableStateFlow(false)
-    val isExecuting: StateFlow<Boolean> = _isExecuting.asStateFlow()
-
+    // ============================================================
+    // 🔧 核心修复：executeCommand 方法 - 使用 executeAsync
+    // ============================================================
     fun executeCommand(command: String) {
         viewModelScope.launch {
             _isExecuting.value = true
@@ -1084,7 +945,6 @@ class FFmpegViewModel : ViewModel() {
             try {
                 // 创建日志回调来实现实时输出
                 val logCallback = LogCallback { log ->
-                    // 在主线程中更新UI
                     viewModelScope.launch(Dispatchers.Main) {
                         val message = log.message ?: ""
                         if (message.isNotBlank()) {
@@ -1095,12 +955,12 @@ class FFmpegViewModel : ViewModel() {
                     }
                 }
 
-                // 在IO线程执行命令，但使用回调实时更新
                 withContext(Dispatchers.IO) {
-                    currentSession = FFmpegKit.executeWithArgumentsAsync(
-                        command.split(" ").toTypedArray(),
+                    // 🔧 使用 executeAsync 直接传入完整命令字符串
+                    // FFmpegKit 内部会正确处理带引号的路径
+                    currentSession = FFmpegKit.executeAsync(
+                        command,
                         { session ->
-                            // 完成回调
                             viewModelScope.launch(Dispatchers.Main) {
                                 handleSessionResult(session)
                             }
@@ -1133,14 +993,12 @@ class FFmpegViewModel : ViewModel() {
             }
         }
 
-        // 添加最终的完整输出（如果有）
         val outputLog = session.output
         if (!outputLog.isNullOrEmpty() && !_executionResult.value.contains(outputLog)) {
             output.append("\n📋 完整输出:\n")
             output.append(outputLog)
         }
 
-        // 添加错误信息
         val failStackTrace = session.failStackTrace
         if (failStackTrace != null) {
             output.append("\n📊 错误堆栈:\n")
@@ -1159,5 +1017,97 @@ class FFmpegViewModel : ViewModel() {
     fun cancelExecution() {
         currentSession?.cancel()
         _isExecuting.value = false
+    }
+
+    // 在 FFmpegViewModel.kt 中添加
+
+    // ============================================================
+// 🔧 新增：带回调的 executeCommand 方法
+// ============================================================
+    fun executeCommandWithCallback(
+        command: String,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isExecuting.value = true
+            _executionResult.value = "正在执行命令: $command\n\n"
+
+            try {
+                // 创建日志回调来实现实时输出
+                val logCallback = LogCallback { log ->
+                    viewModelScope.launch(Dispatchers.Main) {
+                        val message = log.message ?: ""
+                        if (message.isNotBlank()) {
+                            _executionResult.update { currentResult ->
+                                currentResult + message
+                            }
+                        }
+                    }
+                }
+
+                withContext(Dispatchers.IO) {
+                    currentSession = FFmpegKit.executeAsync(
+                        command,
+                        { session ->
+                            viewModelScope.launch(Dispatchers.Main) {
+                                val success = handleSessionResultWithCallback(session)
+                                val message = if (success) {
+                                    "✅ 命令执行成功"
+                                } else {
+                                    "❌ 命令执行失败"
+                                }
+                                onComplete(success, message)
+                            }
+                        },
+                        logCallback,
+                        null
+                    )
+                }
+
+            } catch (e: Exception) {
+                val errorMessage = "❌ 执行异常: ${e.message}"
+                _executionResult.update { it + "\n$errorMessage" }
+                _isExecuting.value = false
+                onComplete(false, errorMessage)
+            }
+        }
+    }
+
+    // 带回调的结果处理
+    private fun handleSessionResultWithCallback(session: FFmpegSession): Boolean {
+        val returnCode = session.returnCode
+        val output = StringBuilder()
+
+        var isSuccess = false
+        when {
+            ReturnCode.isSuccess(returnCode) -> {
+                output.append("\n✅ 命令执行成功\n")
+                isSuccess = true
+            }
+            ReturnCode.isCancel(returnCode) -> {
+                output.append("\n⚠️ 命令已被取消\n")
+            }
+            else -> {
+                output.append("\n❌ 命令执行失败\n")
+            }
+        }
+
+        val outputLog = session.output
+        if (!outputLog.isNullOrEmpty() && !_executionResult.value.contains(outputLog)) {
+            output.append("\n📋 完整输出:\n")
+            output.append(outputLog)
+        }
+
+        val failStackTrace = session.failStackTrace
+        if (failStackTrace != null) {
+            output.append("\n📊 错误堆栈:\n")
+            output.append(failStackTrace)
+        }
+
+        _executionResult.update { it + output.toString() }
+        _isExecuting.value = false
+        currentSession = null
+
+        return isSuccess
     }
 }

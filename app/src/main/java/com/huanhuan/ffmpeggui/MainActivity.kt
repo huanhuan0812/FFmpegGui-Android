@@ -357,7 +357,6 @@ fun VideoMainScreen(
     )
 
     FeatureListScreen(
-        title = "视频功能",
         features = features,
         navController = navController
     )
@@ -382,7 +381,6 @@ fun AudioMainScreen(
     )
 
     FeatureListScreen(
-        title = "音频功能",
         features = features,
         navController = navController
     )
@@ -407,16 +405,14 @@ fun ImageMainScreen(
     )
 
     FeatureListScreen(
-        title = "图像功能",
         features = features,
         navController = navController
     )
 }
 
-// 通用的功能列表界面
+// 通用的功能列表界面 - 移除 title 参数
 @Composable
 fun FeatureListScreen(
-    title: String,
     features: List<Any>,
     navController: androidx.navigation.NavController
 ) {
@@ -425,11 +421,7 @@ fun FeatureListScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        // 移除标题显示，由统一顶栏负责
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(12.dp)

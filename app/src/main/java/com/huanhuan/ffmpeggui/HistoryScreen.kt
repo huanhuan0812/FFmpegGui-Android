@@ -21,17 +21,14 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProgressIndicatorDefaults
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,83 +44,110 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
     onBack: () -> Unit,
-    onNavigateToResult: (String) -> Unit, // 添加导航到结果页面的回调
+    onNavigateToResult: (String) -> Unit,
     viewModel: FFmpegViewModel = viewModel()
 ) {
     LaunchedEffect(Unit) {
-        //自动更新历史记录列表
         viewModel.processingEvents.collect { event ->
-
+            // 自动更新历史记录列表
         }
     }
+
     var showClearAllDialog by remember { mutableStateOf(false) }
     var showClearCompletedDialog by remember { mutableStateOf(false) }
     var taskToDelete by remember { mutableStateOf<ConversionTask?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("历史记录") },
-                actions = {
-                    if (viewModel.historyTasks.isNotEmpty()) {
-                        // 清空已完成文件按钮
-                        IconButton(onClick = { showClearCompletedDialog = true }) {
-                            Icon(Icons.Default.CleaningServices, contentDescription = "清理已完成文件")
-                        }
-                        // 清空所有历史按钮
-                        IconButton(onClick = { showClearAllDialog = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "清空全部")
-                        }
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
-        if (viewModel.historyTasks.isEmpty()) {
-            Box(
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // 操作按钮行 - 移到内容区域顶部
+        if (viewModel.historyTasks.isNotEmpty()) {
+            Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // 清理已完成文件按钮
+                TextButton(
+                    onClick = { showClearCompletedDialog = true },
+                    modifier = Modifier
+                ) {
                     Icon(
-                        Icons.Default.History,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.outline
+                        Icons.Default.CleaningServices,
+                        contentDescription = "清理已完成文件",
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "暂无历史记录",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.outline
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("清理已完成")
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // 清空全部按钮
+                TextButton(
+                    onClick = { showClearAllDialog = true }
+                ) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "清空全部",
+                        modifier = Modifier.size(18.dp)
                     )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("清空全部")
                 }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(viewModel.historyTasks, key = { it.id }) { task ->
-                    HistoryItem(
-                        task = task,
-                        onDeleteClick = { taskToDelete = task },
-                        onItemClick = {
-                            // 点击历史项跳转到结果页面
-                            if (File(task.outputPath).exists()) {
-                                onNavigateToResult(task.outputPath)
+        }
+
+        // 历史列表内容
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .weight(1f)
+        ) {
+            if (viewModel.historyTasks.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.History,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.outline
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "暂无历史记录",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    contentPadding = PaddingValues(vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(viewModel.historyTasks, key = { it.id }) { task ->
+                        HistoryItem(
+                            task = task,
+                            onDeleteClick = { taskToDelete = task },
+                            onItemClick = {
+                                if (File(task.outputPath).exists()) {
+                                    onNavigateToResult(task.outputPath)
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
@@ -218,7 +242,7 @@ fun HistoryItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onItemClick() } // 添加点击事件
+            .clickable { onItemClick() }
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -318,7 +342,6 @@ fun HistoryItem(
                         strokeCap = ProgressIndicatorDefaults.LinearStrokeCap,
                     )
                 } else if (!File(task.outputPath).exists() && task.status == "完成") {
-                    // 如果文件不存在但状态是完成，显示提示
                     Text(
                         text = "文件已删除",
                         style = MaterialTheme.typography.labelSmall,

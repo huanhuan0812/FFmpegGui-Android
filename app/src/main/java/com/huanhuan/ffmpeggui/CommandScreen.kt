@@ -92,17 +92,18 @@ fun CommandScreen(
     onBack: () -> Unit,
     viewModel: FFmpegViewModel = viewModel()
 ) {
-    var arguments by remember { mutableStateOf("-c:v libx264 -preset medium -crf 23") }
+    //  移除预填内容，改为空字符串
+    var arguments by remember { mutableStateOf("") }
     var inputFilePath by remember { mutableStateOf<String?>(null) }
     var inputFileName by remember { mutableStateOf("") }
-    var outputFileName by remember { mutableStateOf("output.mp4") }
+    var outputFileName by remember { mutableStateOf("") } //  移除默认值
     val executionResult by viewModel.executionResult.collectAsState()
     val isExecuting by viewModel.isExecuting.collectAsState()
     val context = LocalContext.current
 
     val resultScrollState = rememberScrollState()
 
-    // 🔧 防止重复跳转
+    //  防止重复跳转
     var hasNavigated by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -126,7 +127,7 @@ fun CommandScreen(
                 return@rememberLauncherForActivityResult
             }
 
-            // 🔧 重置跳转状态
+            //  重置跳转状态
             hasNavigated = false
 
             // 复制到应用私有目录（使用 FileUtils）
@@ -166,8 +167,15 @@ fun CommandScreen(
             inputFilePath = filePath
             inputFileName = file.name
 
+            //  根据输入文件名生成默认输出文件名（但用户可以修改）
             val baseName = file.name.substringBeforeLast(".")
-            outputFileName = "${baseName}_output.mp4"
+            val extension = file.name.substringAfterLast(".", "")
+            outputFileName = if (extension.isNotEmpty()) {
+                "${baseName}_output.$extension"
+            } else {
+                "${baseName}_output"
+            }
+
             Toast.makeText(
                 context,
                 "已选择: ${file.name} (${file.length() / 1024} KB)",
@@ -187,9 +195,12 @@ fun CommandScreen(
         try {
             val permissions = mutableListOf<String>()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                //  Android 13+ 使用更通用的权限
+                permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
                 permissions.add(Manifest.permission.READ_MEDIA_VIDEO)
                 permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
-                permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
+                // 对于其他文件类型，Android 13+ 仍需 MANAGE_EXTERNAL_STORAGE 或使用 SAF
+                // 但 GetContent() 实际上不需要 READ_MEDIA_* 权限，因为它是通过 SAF 选择的
             } else {
                 permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
                 if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
@@ -197,6 +208,7 @@ fun CommandScreen(
                 }
             }
 
+            //  实际上 GetContent() 不需要存储权限，但保留以兼容旧版本
             val missingPermissions = permissions.filter {
                 ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
             }
@@ -209,8 +221,6 @@ fun CommandScreen(
             Log.e(TAG, "权限请求失败", e)
         }
     }
-
-    // 🔧 移除自动跳转的 LaunchedEffect，改为在命令执行完成后手动跳转
 
     Scaffold(
         topBar = {
@@ -248,6 +258,7 @@ fun CommandScreen(
                         onClick = {
                             try {
                                 Log.d(TAG, "打开文件选择器")
+                                //  使用 */* 选择所有文件类型
                                 filePickerLauncher.launch("*/*")
                             } catch (e: Exception) {
                                 Log.e(TAG, "打开文件选择器失败", e)
@@ -278,6 +289,7 @@ fun CommandScreen(
                         label = { Text("输出文件名") },
                         modifier = Modifier.weight(1.5f),
                         singleLine = true,
+                        placeholder = { Text("请输入输出文件名") }, //  添加 placeholder
                         keyboardOptions = KeyboardOptions(
                             capitalization = KeyboardCapitalization.None,
                             autoCorrectEnabled = false,
@@ -355,25 +367,38 @@ fun CommandScreen(
                                     return@ExecuteButton
                                 }
 
+                                //  输出目录保持不变
                                 val outputDir = File(context.getExternalFilesDir(null), "FFmpegOutput")
                                 if (!outputDir.exists()) {
                                     outputDir.mkdirs()
                                 }
-                                val outputPath = File(outputDir, outputFileName).absolutePath
 
-                                // 🔧 构建完整命令
+                                //  如果用户没有指定输出文件名，使用默认名称
+                                val finalOutputName = if (outputFileName.isBlank()) {
+                                    val baseName = inputFile.name.substringBeforeLast(".")
+                                    val extension = inputFile.name.substringAfterLast(".", "")
+                                    if (extension.isNotEmpty()) {
+                                        "${baseName}_output.$extension"
+                                    } else {
+                                        "${baseName}_output"
+                                    }
+                                } else {
+                                    outputFileName
+                                }
+
+                                val outputPath = File(outputDir, finalOutputName).absolutePath
+
+                                //  构建完整命令
                                 val fullCommand = buildFullCommand(arguments, inputFilePath!!, outputPath)
                                 Log.d(TAG, "执行命令: $fullCommand")
 
-                                // 🔧 在回调中处理跳转
+                                //  在回调中处理跳转
                                 viewModel.executeCommandWithCallback(
                                     command = fullCommand,
                                     onComplete = { success, message ->
-                                        // 🔧 与 AudioExtractScreen 一样的处理方式
                                         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
 
                                         if (success) {
-                                            // 防止重复跳转
                                             if (!hasNavigated) {
                                                 hasNavigated = true
                                                 try {
@@ -396,7 +421,7 @@ fun CommandScreen(
                             } else if (inputFilePath == null) {
                                 Toast.makeText(context, "请先选择输入文件", Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(context, "请输入参数", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "请输入 FFmpeg 参数", Toast.LENGTH_SHORT).show()
                             }
                         } catch (e: Exception) {
                             Log.e(TAG, "执行命令失败", e)
@@ -433,7 +458,18 @@ fun CommandScreen(
 
 // 构建预览命令（用于显示）
 private fun buildPreviewCommand(arguments: String, inputFileName: String, outputFileName: String): String {
-    val cleanOutputFileName = outputFileName.trim('"')
+    val cleanOutputFileName = if (outputFileName.isNotBlank()) {
+        outputFileName.trim('"')
+    } else {
+        //  使用默认输出名
+        val baseName = inputFileName.substringBeforeLast(".")
+        val extension = inputFileName.substringAfterLast(".", "")
+        if (extension.isNotEmpty()) {
+            "${baseName}_output.$extension"
+        } else {
+            "${baseName}_output"
+        }
+    }
 
     return if (arguments.contains("-i")) {
         if (arguments.contains("output") || arguments.contains("out")) {
@@ -519,7 +555,7 @@ fun ArgumentsInputCard(
                 isError = arguments.isBlank(),
                 supportingText = {
                     when {
-                        arguments.isBlank() -> Text("⚠️ 参数不能为空")
+                        arguments.isBlank() -> Text("⚠️ 请输入 FFmpeg 参数")
                         inputFileName.isBlank() -> Text("⚠️ 请先选择输入文件")
                         else -> Text("💡 无需输入 -i 和输出文件名")
                     }
@@ -586,7 +622,7 @@ fun ExecutionResultCard(
             SelectionContainer {
                 Text(
                     text = executionResult.ifEmpty {
-                        "暂无执行结果\n\n请选择输入文件并输入参数后执行"
+                        "暂无执行结果\n\n请选择输入文件并输入 FFmpeg 参数后执行"
                     },
                     modifier = Modifier
                         .fillMaxWidth()

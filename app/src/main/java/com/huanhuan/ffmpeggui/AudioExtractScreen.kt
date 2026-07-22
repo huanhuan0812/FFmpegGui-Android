@@ -92,6 +92,8 @@ fun AudioExtractScreen(
         )
     )
 
+    (animatedProgress) // 避免未使用警告
+
     DisposableEffect(lifecycleOwner) {
         onDispose {
             isScreenActive = false

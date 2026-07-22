@@ -26,6 +26,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -188,23 +190,26 @@ fun CommandScreen(
         }
     }
 
-    // 移除 Scaffold，直接使用 Column
+    // 主界面
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // 可滚动内容
         Column(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // 文件选择和教程行
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // 选择文件按钮
                 OutlinedButton(
                     onClick = {
                         try {
@@ -233,6 +238,31 @@ fun CommandScreen(
                     )
                 }
 
+                // 教程按钮
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            navController.navigate("tutorial")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "跳转到教程失败", e)
+                            Toast.makeText(context, "跳转失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.weight(0.6f),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.secondary
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.School,
+                        contentDescription = "查看命令教程",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("教程")
+                }
+
+                // 输出文件名输入
                 OutlinedTextField(
                     value = outputFileName,
                     onValueChange = { outputFileName = it },
@@ -249,12 +279,14 @@ fun CommandScreen(
                 )
             }
 
+            // 参数输入卡片
             ArgumentsInputCard(
                 arguments = arguments,
                 onArgumentsChange = { arguments = it },
                 inputFileName = inputFileName
             )
 
+            // 命令预览卡片
             if (inputFileName.isNotBlank() && arguments.isNotBlank()) {
                 val fullCommand = buildPreviewCommand(arguments, inputFileName, outputFileName)
                 Card(
@@ -289,6 +321,7 @@ fun CommandScreen(
                 }
             }
 
+            // 执行结果卡片
             ExecutionResultCard(
                 executionResult = executionResult,
                 onClear = {
@@ -301,6 +334,7 @@ fun CommandScreen(
             )
         }
 
+        // 底部操作按钮
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -379,6 +413,7 @@ fun CommandScreen(
                 modifier = Modifier.weight(1f)
             )
 
+            // 取消按钮（执行中显示）
             if (isExecuting) {
                 OutlinedButton(
                     onClick = {
@@ -450,6 +485,8 @@ fun ArgumentsInputCard(
     inputFileName: String,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+
     Card(
         modifier = modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -512,12 +549,53 @@ fun ArgumentsInputCard(
                 shape = MaterialTheme.shapes.medium
             )
 
-            Text(
-                text = "💡 仅输入参数即可，系统自动添加输入/输出路径",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "💡 仅输入参数即可，系统自动添加输入/输出路径",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // 快速示例按钮
+                OutlinedButton(
+                    onClick = {
+                        val examples = listOf(
+                            "-c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k",
+                            "-c:v libx265 -preset fast -crf 28 -c:a copy",
+                            "-vf scale=1280:720 -c:v libx264 -c:a copy",
+                            "-ss 00:01:00 -t 00:00:30 -c copy",
+                            "-vn -c:a libmp3lame -b:a 192k",
+                            "-vf fps=10,scale=320:-1",
+                            "-c copy",
+                            "-c:v libx264 -crf 18 -preset veryslow"
+                        )
+                        val currentExample = examples.random()
+                        onArgumentsChange(currentExample)
+                        Toast.makeText(
+                            context,
+                            "已填入示例: $currentExample",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    modifier = Modifier,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.tertiary
+                    )
+                ) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("随机示例", style = MaterialTheme.typography.labelSmall)
+                }
+            }
         }
     }
 }
@@ -546,7 +624,7 @@ fun ExecutionResultCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "执行结果",
+                    text = "📝 执行结果",
                     style = MaterialTheme.typography.titleMedium
                 )
 
@@ -606,7 +684,7 @@ fun ExecuteButton(
             Spacer(modifier = Modifier.width(8.dp))
             Text("执行中...")
         } else {
-            Text("执行命令")
+            Text("🚀 执行命令")
         }
     }
 }

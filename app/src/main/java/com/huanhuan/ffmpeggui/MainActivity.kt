@@ -112,6 +112,7 @@ fun FFmpegApp() {
         currentRoute == "image" -> "图像处理"
         currentRoute == "advanced" -> "高级命令"
         currentRoute == "about" -> "关于"
+        currentRoute == "tutorial" -> "FFmpeg 命令教程"
         currentRoute?.startsWith("video/") == true -> {
             when (currentRoute) {
                 "video/convert" -> "视频转换"
@@ -142,7 +143,7 @@ fun FFmpegApp() {
             currentRoute != "audio" &&
             currentRoute != "image" &&
             currentRoute != "advanced" &&
-            currentRoute !in listOf("about", null)
+            currentRoute !in listOf("about","tutorial", null)
 
     Scaffold(
         topBar = {
@@ -316,6 +317,13 @@ fun FFmpegApp() {
                 composable("about") {
                     AboutScreen(
                         onBack = { navController.navigate("history") }
+                    )
+                }
+
+                composable("tutorial") {
+                    FFmpegTutorialScreen(
+                        navController = navController,
+                        onBack = { navController.popBackStack() }
                     )
                 }
 

@@ -26,7 +26,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -40,12 +39,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.surfaceColorAtElevation
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,6 +54,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -68,7 +65,8 @@ import androidx.navigation.NavController
 @Composable
 fun FFmpegTutorialScreen(
     navController: NavController,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onToggleAll: () -> Unit = {}
 ) {
     var searchText by remember { mutableStateOf("") }
     var expandedCategories by remember { mutableStateOf(setOf<String>()) }
@@ -105,91 +103,89 @@ fun FFmpegTutorialScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "FFmpeg 命令教程",
-                        fontWeight = FontWeight.SemiBold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
-                    // 展开/折叠全部
-                    IconButton(
-                        onClick = {
-                            if (expandedCategories.size == categories.size) {
-                                expandedCategories = emptySet()
-                            } else {
-                                expandedCategories = categories.map { it.name }.toSet()
-                            }
-                        }
-                    ) {
-                        Icon(
-                            if (expandedCategories.size == categories.size)
-                                Icons.Default.UnfoldLess
-                            else
-                                Icons.Default.UnfoldMore,
-                            contentDescription = if (expandedCategories.size == categories.size) "折叠全部" else "展开全部"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
-                )
-            )
-        }
-    ) { paddingValues ->
-        Column(
+    // 内容主体（移除了 Scaffold，因为 TopBar 由 MainActivity 管理）
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        // 搜索框
+        SearchBar(
+            searchText = searchText,
+            onSearchTextChange = { searchText = it },
             modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            // 搜索框
-            SearchBar(
-                searchText = searchText,
-                onSearchTextChange = { searchText = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            )
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+        )
 
-            // 结果统计
+        // 结果统计和操作行
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             if (searchText.isNotBlank()) {
                 val totalMatches = filteredCategories.sumOf { it.parameters.size }
                 Text(
                     text = "找到 $totalMatches 个匹配项",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    text = "${categories.size} 个分类，共 ${categories.sumOf { it.parameters.size }} 个参数",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            // 分类列表
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(filteredCategories) { category ->
-                    ExpandableCategoryCard(
-                        category = category,
-                        isExpanded = expandedCategories.contains(category.name),
-                        onToggle = {
-                            expandedCategories = if (expandedCategories.contains(category.name)) {
-                                expandedCategories - category.name
-                            } else {
-                                expandedCategories + category.name
-                            }
-                        },
-                        searchText = searchText
-                    )
+            // 展开/折叠全部按钮
+            TextButton(
+                onClick = {
+                    if (expandedCategories.size == categories.size) {
+                        expandedCategories = emptySet()
+                    } else {
+                        expandedCategories = categories.map { it.name }.toSet()
+                    }
                 }
+            ) {
+                Icon(
+                    if (expandedCategories.size == categories.size)
+                        Icons.Default.UnfoldLess
+                    else
+                        Icons.Default.UnfoldMore,
+                    contentDescription = if (expandedCategories.size == categories.size) "折叠全部" else "展开全部",
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    if (expandedCategories.size == categories.size) "折叠全部" else "展开全部",
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
+
+        // 分类列表
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(filteredCategories) { category ->
+                ExpandableCategoryCard(
+                    category = category,
+                    isExpanded = expandedCategories.contains(category.name),
+                    onToggle = {
+                        expandedCategories = if (expandedCategories.contains(category.name)) {
+                            expandedCategories - category.name
+                        } else {
+                            expandedCategories + category.name
+                        }
+                    },
+                    searchText = searchText
+                )
             }
         }
     }
@@ -490,7 +486,7 @@ fun ParameterItem(
                         Text(
                             text = parameter.usage,
                             style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                fontFamily = FontFamily.Monospace
                             ),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -516,7 +512,7 @@ fun ParameterItem(
                         Text(
                             text = parameter.example,
                             style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                fontFamily = FontFamily.Monospace
                             ),
                             color = MaterialTheme.colorScheme.onSurface
                         )

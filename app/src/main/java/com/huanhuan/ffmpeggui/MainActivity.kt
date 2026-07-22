@@ -1,3 +1,4 @@
+// MainActivity.kt
 package com.huanhuan.ffmpeggui
 
 import android.net.Uri
@@ -104,7 +105,7 @@ fun FFmpegApp() {
         }
     }
 
-    // 获取当前页面标题
+    // 获取当前页面标题和操作按钮
     val screenTitle = when {
         currentRoute == "history" -> "历史记录"
         currentRoute == "video" -> "视频处理"
@@ -143,14 +144,19 @@ fun FFmpegApp() {
             currentRoute != "audio" &&
             currentRoute != "image" &&
             currentRoute != "advanced" &&
-            currentRoute !in listOf("about","tutorial", null)
+            currentRoute !in listOf("about", "tutorial", null)
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(screenTitle) },
                 actions = {
-                    // 只在主页面显示关于按钮
+                    // 教程页面显示展开/折叠全部按钮
+                    if (currentRoute == "tutorial") {
+                        // 这个按钮由 TutorialScreen 自己控制，这里不添加
+                        // 或者可以添加一个搜索按钮
+                    }
+                    // 主页面的关于按钮
                     if (currentRoute in listOf("history", "video", "audio", "image", "advanced")) {
                         IconButton(onClick = {
                             navController.navigate("about")
@@ -165,10 +171,10 @@ fun FFmpegApp() {
                 navigationIcon = {
                     if (showBackButton) {
                         IconButton(onClick = {
-                            if (currentRoute == "about") {
-                                navController.navigate("history")
-                            } else {
-                                navController.popBackStack()
+                            when {
+                                currentRoute == "about" -> navController.navigate("history")
+                                currentRoute == "tutorial" -> navController.popBackStack()
+                                else -> navController.popBackStack()
                             }
                         }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -178,43 +184,50 @@ fun FFmpegApp() {
             )
         },
         bottomBar = {
-            // 底部导航栏 - 四个主分类
-            NavigationBar {
-                val tabs = listOf(
-                    BottomNavItem("历史", "history", Icons.Default.History, Icons.Outlined.History),
-                    BottomNavItem("视频", "video", Icons.Default.VideoLibrary, Icons.Outlined.VideoLibrary),
-                    BottomNavItem("音频", "audio", Icons.Default.Audiotrack, Icons.Outlined.Audiotrack),
-                    BottomNavItem("图像", "image", Icons.Default.Image, Icons.Outlined.Image),
-                    BottomNavItem("高级", "advanced", Icons.Default.Terminal, Icons.Outlined.Terminal)
-                )
+            // 底部导航栏 - 只在主页面和二级页面显示（教程、关于、结果页面不显示）
+            val shouldShowBottomBar = currentRoute != null &&
+                    currentRoute != "tutorial" &&
+                    currentRoute != "about" &&
+                    !currentRoute.startsWith("result/")
 
-                tabs.forEach { tab ->
-                    NavigationBarItem(
-                        selected = currentRoute == tab.route ||
-                                (tab.route == "video" && (currentRoute?.startsWith("video/") == true)) ||
-                                (tab.route == "audio" && (currentRoute?.startsWith("audio/") == true)) ||
-                                (tab.route == "image" && (currentRoute?.startsWith("image/") == true)),
-                        onClick = {
-                            navController.navigate(tab.route) {
-                                popUpTo(navController.graph.startDestinationId)
-                                launchSingleTop = true
-                            }
-                        },
-                        icon = {
-                            BadgedBox(badge = { }) {
-                                Icon(
-                                    if (currentRoute == tab.route ||
-                                        (tab.route == "video" && currentRoute?.startsWith("video/") == true) ||
-                                        (tab.route == "audio" && currentRoute?.startsWith("audio/") == true) ||
-                                        (tab.route == "image" && currentRoute?.startsWith("image/") == true) ||
-                                        (tab.route == "advanced" && currentRoute?.startsWith("advanced/") == true)
-                                    ) tab.selectedIcon else tab.unselectedIcon,
-                                    contentDescription = tab.title
-                                )
-                            }
-                        },
-                        label = { Text(tab.title) }
+            if (shouldShowBottomBar) {
+                NavigationBar {
+                    val tabs = listOf(
+                        BottomNavItem("历史", "history", Icons.Default.History, Icons.Outlined.History),
+                        BottomNavItem("视频", "video", Icons.Default.VideoLibrary, Icons.Outlined.VideoLibrary),
+                        BottomNavItem("音频", "audio", Icons.Default.Audiotrack, Icons.Outlined.Audiotrack),
+                        BottomNavItem("图像", "image", Icons.Default.Image, Icons.Outlined.Image),
+                        BottomNavItem("高级", "advanced", Icons.Default.Terminal, Icons.Outlined.Terminal)
                     )
+
+                    tabs.forEach { tab ->
+                        NavigationBarItem(
+                            selected = currentRoute == tab.route ||
+                                    (tab.route == "video" && (currentRoute?.startsWith("video/") == true)) ||
+                                    (tab.route == "audio" && (currentRoute?.startsWith("audio/") == true)) ||
+                                    (tab.route == "image" && (currentRoute?.startsWith("image/") == true)),
+                            onClick = {
+                                navController.navigate(tab.route) {
+                                    popUpTo(navController.graph.startDestinationId)
+                                    launchSingleTop = true
+                                }
+                            },
+                            icon = {
+                                BadgedBox(badge = { }) {
+                                    Icon(
+                                        if (currentRoute == tab.route ||
+                                            (tab.route == "video" && currentRoute?.startsWith("video/") == true) ||
+                                            (tab.route == "audio" && currentRoute?.startsWith("audio/") == true) ||
+                                            (tab.route == "image" && currentRoute?.startsWith("image/") == true) ||
+                                            (tab.route == "advanced" && currentRoute?.startsWith("advanced/") == true)
+                                        ) tab.selectedIcon else tab.unselectedIcon,
+                                        contentDescription = tab.title
+                                    )
+                                }
+                            },
+                            label = { Text(tab.title) }
+                        )
+                    }
                 }
             }
         }
@@ -320,10 +333,13 @@ fun FFmpegApp() {
                     )
                 }
 
+                // 教程界面
                 composable("tutorial") {
                     FFmpegTutorialScreen(
                         navController = navController,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        // 传入控制展开/折叠的回调
+                        onToggleAll = { /* 由 TutorialScreen 内部管理 */ }
                     )
                 }
 

@@ -117,10 +117,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material3.adaptive.navigation.suite)
 
-    // FFmpeg 依赖 - 注意这个库可能已经包含多架构支持
-    implementation("io.github.jamaismagic.ffmpeg:ffmpeg-kit-lts-16kb:6.1.7"){
-        exclude(group = "com.intellij", module = "annotations")
-    }
+    implementation("com.moizhassan.ffmpeg.ffmpegkit:ffmpegkit:6.1.1")
 
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.androidx.navigation.ui.ktx)

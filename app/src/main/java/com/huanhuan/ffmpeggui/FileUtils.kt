@@ -140,7 +140,7 @@ private fun getPathFromMediaStore(context: Context, uri: Uri): String? {
                 return filePath
             }
         }
-    } catch (e: Exception) {
+    } catch ( _ : Exception) {
         // parseId 可能失败，继续其他方法
     }
 
@@ -188,7 +188,7 @@ private fun getFileSizeFromUri(context: Context, uri: Uri): Long {
         context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
             pfd.statSize
         } ?: -1
-    } catch (e: Exception) {
+    } catch ( _ : Exception) {
         -1
     }
 }

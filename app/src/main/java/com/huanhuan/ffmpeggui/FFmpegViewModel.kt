@@ -1,5 +1,6 @@
 package com.huanhuan.ffmpeggui
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.getValue
@@ -1010,5 +1011,446 @@ class FFmpegViewModel : ViewModel() {
         cancelCurrentProcessing()
         com.arthenica.ffmpegkit.FFmpegKitConfig.enableStatisticsCallback(null)
         com.arthenica.ffmpegkit.FFmpegKitConfig.enableLogCallback(null)
+    }
+
+    // ============================================================
+// 音频信息相关
+// ============================================================
+
+    data class AudioInfo(
+        val filePath: String,
+        val fileName: String,
+        val fileSize: String,
+        val duration: String,
+        val durationSeconds: Double,
+        val bitRate: String,
+        val sampleRate: String,
+        val channels: String,
+        val codec: String,
+        val codecLongName: String,
+        val bitDepth: String? = null,
+        val streamCount: Int = 0,
+        val metadata: Map<String, String> = emptyMap(),
+        val isVideoPresent: Boolean = false,
+        val formatName: String = ""
+    )
+
+    suspend fun getAudioInfo(filePath: String): AudioInfo? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val file = File(filePath)
+                if (!file.exists()) {
+                    Log.e("FFmpegViewModel", "文件不存在: $filePath")
+                    return@withContext null
+                }
+
+                val mediaInfoSession = FFprobeKit.getMediaInformation(filePath)
+                val mediaInformation = mediaInfoSession.mediaInformation
+
+                if (mediaInformation == null) {
+                    Log.e("FFmpegViewModel", "无法获取媒体信息: ${mediaInfoSession.failStackTrace}")
+                    return@withContext null
+                }
+
+                // 获取音频流
+                val streams = mediaInformation.streams
+                val audioStream = streams?.firstOrNull { it.type == "audio" }
+
+                if (audioStream == null) {
+                    Log.e("FFmpegViewModel", "未找到音频流")
+                    return@withContext null
+                }
+
+                // 检查是否有视频流
+                val hasVideo = streams?.any { it.type == "video" } == true
+
+                // 解析时长
+                val durationStr = mediaInformation.duration ?: "0"
+                val durationSeconds = durationStr.toDoubleOrNull() ?: 0.0
+                val duration = formatDuration(durationSeconds)
+
+                // 解析文件大小
+                val fileSizeBytes = file.length()
+                val fileSize = formatFileSize(fileSizeBytes)
+
+                // 解析比特率
+                val bitRate = audioStream.bitrate ?: mediaInformation.bitrate
+                val bitRateFormatted = bitRate?.toLongOrNull()?.let {
+                    if (it > 0) "${it / 1000} kbps" else "未知"
+                } ?: "未知"
+
+                // 解析采样率
+                val sampleRate = audioStream.sampleRate
+                val sampleRateFormatted = sampleRate?.toIntOrNull()?.let {
+                    if (it >= 1000) "${it / 1000} kHz" else "${it} Hz"
+                } ?: "未知"
+
+                // ============================================================
+                // 修复：声道解析
+                // ============================================================
+                val channelLayout = audioStream.channelLayout
+                val channelsFormatted = when {
+                    channelLayout.isNullOrBlank() -> "未知"
+                    channelLayout.equals("mono", ignoreCase = true) || channelLayout == "1" -> "单声道 (1)"
+                    channelLayout.equals("stereo", ignoreCase = true) || channelLayout == "2" -> "立体声 (2)"
+                    channelLayout.equals("5.1", ignoreCase = true) || channelLayout == "6" -> "5.1 声道 (6)"
+                    channelLayout.equals("7.1", ignoreCase = true) || channelLayout == "8" -> "7.1 声道 (8)"
+                    else -> {
+                        val numberMatch = Regex("\\d+").find(channelLayout)
+                        if (numberMatch != null) {
+                            val num = numberMatch.value.toIntOrNull()
+                            when (num) {
+                                1 -> "单声道 (1)"
+                                2 -> "立体声 (2)"
+                                6 -> "5.1 声道 (6)"
+                                8 -> "7.1 声道 (8)"
+                                else -> "${num} 声道"
+                            }
+                        } else {
+                            channelLayout
+                        }
+                    }
+                }
+
+                // ============================================================
+                // 修复：编码器解析
+                // ============================================================
+                val codec = audioStream.codec ?: audioStream.codec ?: "未知"
+                val codecLongName = audioStream.codecLong ?: audioStream.codecLong ?: ""
+
+                //Log.d("FFmpegViewModel", "解析音频信息: codec=$codec, codecLongName=$codecLongName")
+                // 如果 codecLongName 为空，根据 codec 生成描述
+                val finalCodecLongName = if (codecLongName.isBlank() && codec != "未知") {
+                    when (codec.lowercase()) {
+                        "mp3", "libmp3lame" -> "MP3 (MPEG-1 Audio Layer III)"
+                        "aac" -> "Advanced Audio Coding"
+                        "flac" -> "Free Lossless Audio Codec"
+                        "opus" -> "Opus Interactive Audio Codec"
+                        "vorbis" -> "Vorbis Audio Codec"
+                        "pcm_s16le" -> "PCM 16-bit little-endian"
+                        "pcm_s24le" -> "PCM 24-bit little-endian"
+                        "pcm_s32le" -> "PCM 32-bit little-endian"
+                        "pcm_f32le" -> "PCM 32-bit float little-endian"
+                        "pcm_f64le" -> "PCM 64-bit float little-endian"
+                        "alac" -> "Apple Lossless Audio Codec"
+                        "ac3" -> "Dolby Digital AC-3"
+                        "eac3" -> "Enhanced AC-3"
+                        "dts" -> "DTS Coherent Acoustics"
+                        "truehd" -> "Dolby TrueHD"
+                        "mlp" -> "Meridian Lossless Packing"
+                        "wavpack" -> "WavPack Audio Codec"
+                        "tta" -> "True Audio (TTA)"
+                        "ape" -> "Monkey's Audio"
+                        "wma" -> "Windows Media Audio"
+                        "wmalossless" -> "Windows Media Audio Lossless"
+                        "ra" -> "RealAudio"
+                        "amr" -> "Adaptive Multi-Rate"
+                        "amr_wb" -> "Adaptive Multi-Rate Wideband"
+                        "g723_1" -> "G.723.1"
+                        "g729" -> "G.729"
+                        "speex" -> "Speex Audio Codec"
+                        "gsm" -> "GSM Audio"
+                        "aac_latm" -> "AAC LATM"
+                        "aac_fixed" -> "AAC Fixed"
+                        "aac_mf" -> "AAC (MediaFoundation)"
+                        "libfdk_aac" -> "Fraunhofer FDK AAC"
+                        "libopus" -> "Opus (libopus)"
+                        "libvorbis" -> "Vorbis (libvorbis)"
+                        "libmp3lame" -> "MP3 (LAME)"
+                        "libshine" -> "MP3 (Shine)"
+                        "libtwolame" -> "MP2 (TwoLAME)"
+                        "libspeex" -> "Speex (libspeex)"
+                        else -> codec
+                    }
+                } else {
+                    codecLongName
+                }
+
+                // 解析位深
+                val bitDepth = audioStream.sampleFormat?.let { fmt ->
+                    when {
+                        fmt.contains("s16") || fmt.contains("s16p") -> "16-bit"
+                        fmt.contains("s24") || fmt.contains("s24p") -> "24-bit"
+                        fmt.contains("s32") || fmt.contains("s32p") -> "32-bit"
+                        fmt.contains("flt") || fmt.contains("fltp") -> "浮点"
+                        fmt.contains("dbl") || fmt.contains("dblp") -> "双精度"
+                        else -> null
+                    }
+                } ?: audioStream.bitrate?.toIntOrNull()?.let {
+                    if (it > 0) "${it}-bit" else null
+                }
+
+                // 获取格式名称
+                val formatName = mediaInformation.format ?: ""
+
+                return@withContext AudioInfo(
+                    filePath = filePath,
+                    fileName = file.name,
+                    fileSize = fileSize,
+                    duration = duration,
+                    durationSeconds = durationSeconds,
+                    bitRate = bitRateFormatted,
+                    sampleRate = sampleRateFormatted,
+                    channels = channelsFormatted,
+                    codec = codec,
+                    codecLongName = finalCodecLongName,
+                    bitDepth = bitDepth,
+                    streamCount = streams?.size ?: 0,
+                    isVideoPresent = hasVideo,
+                    formatName = formatName
+                )
+
+            } catch (e: Exception) {
+                Log.e("FFmpegViewModel", "获取音频信息失败", e)
+                return@withContext null
+            }
+        }
+    }
+
+    @SuppressLint("DefaultLocale")
+    private fun formatDuration(seconds: Double): String {
+        val totalSeconds = seconds.toLong()
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val secs = totalSeconds % 60
+
+        return if (hours > 0) {
+            String.format("%02d:%02d:%02d", hours, minutes, secs)
+        } else {
+            String.format("%02d:%02d", minutes, secs)
+        }
+    }
+
+    @SuppressLint("DefaultLocale")
+    private fun formatFileSize(sizeBytes: Long): String {
+        return when {
+            sizeBytes < 1024 -> "${sizeBytes} B"
+            sizeBytes < 1024 * 1024 -> String.format("%.2f KB", sizeBytes / 1024.0)
+            sizeBytes < 1024 * 1024 * 1024 -> String.format("%.2f MB", sizeBytes / (1024.0 * 1024.0))
+            else -> String.format("%.2f GB", sizeBytes / (1024.0 * 1024.0 * 1024.0))
+        }
+    }
+
+    // ============================================================
+// 视频信息相关
+// ============================================================
+
+    data class VideoInfo(
+        val filePath: String,
+        val fileName: String,
+        val fileSize: String,
+        val duration: String,
+        val durationSeconds: Double,
+        val bitRate: String,
+        val width: Int,
+        val height: Int,
+        val resolution: String,
+        val frameRate: String,
+        val videoCodec: String,
+        val videoCodecLongName: String,
+        val audioCodec: String,
+        val audioCodecLongName: String,
+        val sampleRate: String,
+        val channels: String,
+        val audioBitRate: String,
+        val pixelFormat: String? = null,
+        val colorSpace: String? = null,
+        val hdr: Boolean = false,
+        val hasAudio: Boolean = false,
+        val streamCount: Int = 0,
+        val metadata: Map<String, String> = emptyMap(),
+        val formatName: String = ""
+    )
+
+    @SuppressLint("DefaultLocale")
+    suspend fun getVideoInfo(filePath: String): VideoInfo? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val file = File(filePath)
+                if (!file.exists()) {
+                    Log.e("FFmpegViewModel", "文件不存在: $filePath")
+                    return@withContext null
+                }
+
+                val mediaInfoSession = FFprobeKit.getMediaInformation(filePath)
+                val mediaInformation = mediaInfoSession.mediaInformation
+
+                if (mediaInformation == null) {
+                    Log.e("FFmpegViewModel", "无法获取媒体信息: ${mediaInfoSession.failStackTrace}")
+                    return@withContext null
+                }
+
+                val streams = mediaInformation.streams
+                if (streams.isNullOrEmpty()) {
+                    Log.e("FFmpegViewModel", "未找到任何流")
+                    return@withContext null
+                }
+
+                // 获取视频流
+                val videoStream = streams.firstOrNull { it.type == "video" }
+                if (videoStream == null) {
+                    Log.e("FFmpegViewModel", "未找到视频流")
+                    return@withContext null
+                }
+
+                // 获取音频流
+                val audioStream = streams.firstOrNull { it.type == "audio" }
+
+                // 解析时长
+                val durationStr = mediaInformation.duration ?: "0"
+                val durationSeconds = durationStr.toDoubleOrNull() ?: 0.0
+                val duration = formatDuration(durationSeconds)
+
+                // 解析文件大小
+                val fileSizeBytes = file.length()
+                val fileSize = formatFileSize(fileSizeBytes)
+
+                // 解析视频尺寸
+                val width = videoStream.width?.toInt() ?: 0
+                val height = videoStream.height?.toInt() ?: 0
+                val resolution = if (width > 0 && height > 0) "${width}x${height}" else "未知"
+
+                // 解析帧率
+                val frameRate = videoStream.realFrameRate?: ""
+                val frameRateFormatted = if (frameRate.isNotBlank()) {
+                    try {
+                        val parts = frameRate.split('/')
+                        if (parts.size == 2) {
+                            val fps = parts[0].toDoubleOrNull()?.div(parts[1].toDoubleOrNull() ?: 1.0)
+                            if (fps != null && fps > 0) {
+                                String.format("%.2f fps", fps)
+                            } else {
+                                frameRate
+                            }
+                        } else {
+                            frameRate
+                        }
+                    } catch (_: Exception) {
+                        frameRate
+                    }
+                } else {
+                    "未知"
+                }
+
+                // 解析视频编码器
+                val videoCodec = videoStream.codec ?: "未知"
+                val videoCodecLongName = videoStream.codecLong ?: ""
+
+                // 解析像素格式
+                val pixelFormat = videoStream.getStringProperty("pix_fmt") ?: "未知"
+
+
+
+                // 解析色彩空间
+                val colorSpace = videoStream.getStringProperty("color_space") ?: "未知"
+
+                //Log.d("FFmpegViewModel","色彩空间: $colorSpace")
+
+                // 输出全部property信息用于调试
+//                val allProperties = mediaInformation.allProperties
+//                Log.d("FFmpegViewModel", "所有属性: ${allProperties.toString()}")
+//                Log.d("FFmpegViewModel", "视频流属性: ${videoStream.allProperties.toString()}")
+
+
+                // 检测 HDR（基于色彩空间和色深）
+                val hdr = colorSpace?.let {
+                    it.contains("2020", ignoreCase = true) ||
+                            it.contains("2100", ignoreCase = true) ||
+                            it.contains("st2084", ignoreCase = true) ||
+                            it.contains("smpte", ignoreCase = true)
+                } ?: false
+
+                // 解析比特率
+                val bitRate = videoStream.bitrate ?: mediaInformation.bitrate
+                val bitRateFormatted = bitRate?.toLongOrNull()?.let {
+                    if (it > 0) {
+                        when {
+                            it >= 1000000 -> String.format("%.2f Mbps", it / 1000000.0)
+                            it >= 1000 -> String.format("%.2f kbps", it / 1000.0)
+                            else -> "${it} bps"
+                        }
+                    } else {
+                        "未知"
+                    }
+                } ?: "未知"
+
+                // 解析音频信息
+                val audioCodec = audioStream?.codec ?: "无音频流"
+                val audioCodecLongName = audioStream?.codecLong ?: ""
+                val audioBitRate = audioStream?.bitrate?.toLongOrNull()?.let {
+                    if (it > 0) {
+                        when {
+                            it >= 1000000 -> String.format("%.2f Mbps", it / 1000000.0)
+                            it >= 1000 -> String.format("%.2f kbps", it / 1000.0)
+                            else -> "${it} bps"
+                        }
+                    } else {
+                        "未知"
+                    }
+                } ?: "未知"
+
+                val sampleRate = audioStream?.sampleRate?.toIntOrNull()?.let {
+                    if (it >= 1000) "${it / 1000} kHz" else "${it} Hz"
+                } ?: "未知"
+
+                val channelLayout = audioStream?.channelLayout
+                val channelsFormatted = when {
+                    channelLayout.isNullOrBlank() -> "未知"
+                    channelLayout.equals("mono", ignoreCase = true) || channelLayout == "1" -> "单声道 (1)"
+                    channelLayout.equals("stereo", ignoreCase = true) || channelLayout == "2" -> "立体声 (2)"
+                    channelLayout.equals("5.1", ignoreCase = true) || channelLayout == "6" -> "5.1 声道 (6)"
+                    channelLayout.equals("7.1", ignoreCase = true) || channelLayout == "8" -> "7.1 声道 (8)"
+                    else -> {
+                        val numberMatch = Regex("\\d+").find(channelLayout)
+                        if (numberMatch != null) {
+                            val num = numberMatch.value.toIntOrNull()
+                            when (num) {
+                                1 -> "单声道 (1)"
+                                2 -> "立体声 (2)"
+                                6 -> "5.1 声道 (6)"
+                                8 -> "7.1 声道 (8)"
+                                else -> "${num} 声道"
+                            }
+                        } else {
+                            channelLayout
+                        }
+                    }
+                }
+
+                // 获取格式名称
+                val formatName = mediaInformation.format ?: ""
+
+                return@withContext VideoInfo(
+                    filePath = filePath,
+                    fileName = file.name,
+                    fileSize = fileSize,
+                    duration = duration,
+                    durationSeconds = durationSeconds,
+                    bitRate = bitRateFormatted,
+                    width = width,
+                    height = height,
+                    resolution = resolution,
+                    frameRate = frameRateFormatted,
+                    videoCodec = videoCodec,
+                    videoCodecLongName = videoCodecLongName,
+                    audioCodec = audioCodec,
+                    audioCodecLongName = audioCodecLongName,
+                    sampleRate = sampleRate,
+                    channels = channelsFormatted,
+                    audioBitRate = audioBitRate,
+                    pixelFormat = pixelFormat,
+                    colorSpace = colorSpace,
+                    hdr = hdr,
+                    hasAudio = audioStream != null,
+                    streamCount = streams.size,
+                    metadata = emptyMap(),
+                    formatName = formatName
+                )
+
+            } catch (e: Exception) {
+                Log.e("FFmpegViewModel", "获取视频信息失败", e)
+                return@withContext null
+            }
+        }
     }
 }

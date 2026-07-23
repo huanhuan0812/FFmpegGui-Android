@@ -114,17 +114,21 @@ fun FFmpegApp() {
         currentRoute == "advanced" -> "高级命令"
         currentRoute == "about" -> "关于"
         currentRoute == "tutorial" -> "FFmpeg 命令教程"
+        currentRoute == "audio/info" -> "音频信息"
+        currentRoute == "video/info" -> "视频信息"
         currentRoute?.startsWith("video/") == true -> {
             when (currentRoute) {
                 "video/convert" -> "视频转换"
                 "video/gifconvert" -> "视频转GIF"
                 "video/extract" -> "音频提取"
+                "video/info" -> "视频信息"
                 else -> "视频处理"
             }
         }
         currentRoute?.startsWith("audio/") == true -> {
             when (currentRoute) {
                 "audio/convert" -> "音频转换"
+                "audio/info" -> "音频信息"
                 else -> "音频处理"
             }
         }
@@ -144,6 +148,8 @@ fun FFmpegApp() {
             currentRoute != "audio" &&
             currentRoute != "image" &&
             currentRoute != "advanced" &&
+            currentRoute != "audio/info" &&
+            currentRoute != "video/info" &&
             currentRoute !in listOf("about", "tutorial", null)
 
     Scaffold(
@@ -173,6 +179,8 @@ fun FFmpegApp() {
                             when {
                                 currentRoute == "about" -> navController.navigate("history")
                                 currentRoute == "tutorial" -> navController.popBackStack()
+                                currentRoute == "audio/info" -> navController.popBackStack()
+                                currentRoute == "video/info" -> navController.popBackStack()
                                 else -> navController.popBackStack()
                             }
                         }) {
@@ -187,6 +195,8 @@ fun FFmpegApp() {
             val shouldShowBottomBar = currentRoute != null &&
                     currentRoute != "tutorial" &&
                     currentRoute != "about" &&
+                    currentRoute != "audio/info" &&
+                    currentRoute != "video/info" &&
                     !currentRoute.startsWith("result/")
 
             if (shouldShowBottomBar) {
@@ -298,6 +308,7 @@ fun FFmpegApp() {
                     )
                 }
 
+                // 视频转GIF界面（二级页面）
                 composable("video/gifconvert") {
                     VideoToGifScreen(
                         navController = navController,
@@ -320,6 +331,28 @@ fun FFmpegApp() {
                     AudioConvertScreen(
                         navController = navController,
                         onBack = { navController.popBackStack() },
+                        viewModel = viewModel
+                    )
+                }
+
+                // ============================================================
+                // 新增：音频信息界面
+                // ============================================================
+                composable("audio/info") {
+                    AudioInfoScreen(
+                        onBack = { navController.popBackStack() },
+                        navController = navController,
+                        viewModel = viewModel
+                    )
+                }
+
+                // ============================================================
+                // 新增：视频信息界面
+                // ============================================================
+                composable("video/info") {
+                    VideoInfoScreen(
+                        onBack = { navController.popBackStack() },
+                        navController = navController,
                         viewModel = viewModel
                     )
                 }
@@ -393,9 +426,10 @@ fun VideoMainScreen(
     onBack: () -> Unit
 ) {
     val features = listOf(
-        AudioFeature("extract", "音频提取", Icons.Default.Audiotrack, "video/extract"),
         VideoFeature("convert", "视频转换", Icons.Default.VideoLibrary, "video/convert"),
         VideoFeature("gifconvert", "视频转GIF", Icons.Default.Movie, "video/gifconvert"),
+        VideoFeature("extract", "音频提取", Icons.Default.Audiotrack, "video/extract"),
+        VideoFeature("info", "视频信息", Icons.Default.Info, "video/info")  // 新增：视频信息入口
     )
 
     FeatureListScreen(
@@ -419,7 +453,8 @@ fun AudioMainScreen(
     onBack: () -> Unit
 ) {
     val features = listOf(
-        AudioFeature("convert", "音频转换", Icons.Default.MusicNote, "audio/convert")
+        AudioFeature("convert", "音频转换", Icons.Default.MusicNote, "audio/convert"),
+        AudioFeature("info", "音频信息", Icons.Default.Info, "audio/info")  // 新增音频信息入口
     )
 
     FeatureListScreen(

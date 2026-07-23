@@ -12,6 +12,7 @@ import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import java.io.File
 import java.io.FileOutputStream
+import androidx.core.net.toUri
 
 private const val TAG = "FileUtils"
 
@@ -159,7 +160,7 @@ fun fileExistsCompat(context: Context, filePath: String): Boolean {
 
         // 方法2：如果是 content:// URI，尝试通过 ContentResolver 访问
         if (filePath.startsWith("content://")) {
-            val uri = Uri.parse(filePath)
+            val uri = filePath.toUri()
             try {
                 context.contentResolver.openInputStream(uri)?.use {
                     it.close()
@@ -204,7 +205,7 @@ fun fileExistsCompat(context: Context, filePath: String): Boolean {
                 Log.d(TAG, "✅ 文件存在 (文件长度检查): $filePath, 大小: ${file.length()}")
                 return true
             }
-        } catch (e: Exception) {
+        } catch ( _ : Exception) {
             // 忽略
         }
 
@@ -227,7 +228,7 @@ fun getFileUriFromPath(context: Context, filePath: String): Uri? {
     return try {
         // 如果已经是 content URI
         if (filePath.startsWith("content://")) {
-            return Uri.parse(filePath)
+            return filePath.toUri()
         }
 
         val file = File(filePath)
@@ -321,7 +322,7 @@ fun deleteFileCompat(context: Context, filePath: String): Boolean {
 
         // 方法2：如果是 content:// URI，尝试通过 ContentResolver 删除
         if (filePath.startsWith("content://")) {
-            val uri = Uri.parse(filePath)
+            val uri = filePath.toUri()
             try {
                 val deleted = context.contentResolver.delete(uri, null, null)
                 if (deleted > 0) {
@@ -425,13 +426,13 @@ fun isFileReadableCompat(context: Context, filePath: String): Boolean {
                     it.close()
                     return true
                 }
-            } catch (e: Exception) {
+            } catch ( _ : Exception) {
                 // 忽略
             }
         }
 
         false
-    } catch (e: Exception) {
+    } catch ( _ : Exception) {
         false
     }
 }
@@ -463,52 +464,13 @@ fun getFileSizeCompat(context: Context, filePath: String): Long {
                     it.close()
                     return size
                 }
-            } catch (e: Exception) {
+            } catch ( _ : Exception) {
                 // 忽略
             }
         }
 
         -1
-    } catch (e: Exception) {
+    } catch ( _ : Exception) {
         -1
-    }
-}
-
-/**
- * 复制文件到缓存目录
- */
-fun copyToCache(context: Context, filePath: String): String? {
-    if (filePath.isEmpty()) {
-        return null
-    }
-
-    try {
-        val sourceFile = File(filePath)
-        val fileName = sourceFile.name
-        val cacheFile = File(context.cacheDir, "copy_${System.currentTimeMillis()}_$fileName")
-
-        // 如果文件存在，直接返回
-        if (sourceFile.exists()) {
-            sourceFile.copyTo(cacheFile, overwrite = true)
-            Log.d(TAG, "✅ 文件复制到缓存: ${cacheFile.absolutePath}")
-            return cacheFile.absolutePath
-        }
-
-        // 尝试通过 ContentResolver 复制
-        val uri = getFileUriFromPath(context, filePath)
-        if (uri != null) {
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(cacheFile).use { output ->
-                    input.copyTo(output)
-                }
-                Log.d(TAG, "✅ 文件通过 ContentResolver 复制到缓存: ${cacheFile.absolutePath}")
-                return cacheFile.absolutePath
-            }
-        }
-
-        return null
-    } catch (e: Exception) {
-        Log.e(TAG, "复制文件到缓存失败", e)
-        return null
     }
 }

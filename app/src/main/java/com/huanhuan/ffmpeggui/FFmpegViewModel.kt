@@ -1,7 +1,6 @@
 package com.huanhuan.ffmpeggui
 
 import android.content.Context
-import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
@@ -18,24 +17,23 @@ import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.FFprobeKit
 import com.arthenica.ffmpegkit.LogCallback
 import com.arthenica.ffmpegkit.ReturnCode
+import com.huanhuan.ffmpeggui.db.History
 import com.huanhuan.ffmpeggui.db.HistoryDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 import java.util.UUID
-
-import com.huanhuan.ffmpeggui.db.History
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 
 data class ConversionTask(
     val id: String,
@@ -63,7 +61,7 @@ fun ConversionTask.toHistory(): History {
         endTime = this.endTime ?: 0L,  // 新增：保存结束时间
         size = try {
             File(this.outputPath).length().toInt()
-        } catch (e: Exception) {
+        } catch ( _ : Exception) {
             0
         }
     )

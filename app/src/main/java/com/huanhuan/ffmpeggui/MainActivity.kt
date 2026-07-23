@@ -358,7 +358,7 @@ fun FFmpegApp() {
                     // 解码路径
                     val outputPath = try {
                         URLDecoder.decode(encodedPath, "UTF-8")
-                    } catch (e: Exception) {
+                    } catch ( _ : Exception) {
                         // 如果 URLDecoder 失败，尝试使用 Uri.decode
                         try {
                             Uri.decode(encodedPath)

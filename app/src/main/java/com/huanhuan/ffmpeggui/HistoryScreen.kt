@@ -198,7 +198,7 @@ fun HistoryScreen(
             text = {
                 val fileName = try {
                     File(taskToDelete!!.outputPath).name
-                } catch (e: Exception) {
+                } catch ( _ : Exception) {
                     "未知文件"
                 }
                 Text("确定要删除这条记录及其对应的输出文件吗？\n\n文件：$fileName")
@@ -313,7 +313,7 @@ fun HistoryItem(
             } else {
                 "未知文件"
             }
-        } catch (e: Exception) {
+        } catch ( _ : Exception) {
             "未知文件"
         }
     }
@@ -325,7 +325,7 @@ fun HistoryItem(
             } else {
                 "未知文件"
             }
-        } catch (e: Exception) {
+        } catch ( _ : Exception) {
             "未知文件"
         }
     }
@@ -515,7 +515,7 @@ fun formatTimestamp(timestamp: Long): String {
         val date = Date(timestamp)
         val format = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
         format.format(date)
-    } catch (e: Exception) {
+    } catch ( _ : Exception) {
         "未知时间"
     }
 }

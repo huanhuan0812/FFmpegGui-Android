@@ -68,22 +68,9 @@ fun AboutScreen(
     val versionName = BuildConfig.VERSION_NAME
     val versionCode = BuildConfig.VERSION_CODE
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("关于") }
-//                navigationIcon = {
-//                    IconButton(onClick = onBack) {
-//                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-//                    }
-//                }
-            )
-        }
-    ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
+                .fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // App Logo 和名称
@@ -525,7 +512,7 @@ fun AboutScreen(
                 Spacer(modifier = Modifier.height(32.dp))
             }
         }
-    }
+
 }
 
 @Composable

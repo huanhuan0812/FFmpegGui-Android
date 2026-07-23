@@ -405,17 +405,6 @@ fun AudioInfoContent(audioInfo: AudioInfo) {
             )
         )
 
-        // 元数据卡片（如果有）
-        if (audioInfo.metadata.isNotEmpty()) {
-            InfoCard(
-                title = "元数据",
-                icon = Icons.Default.Info,
-                items = audioInfo.metadata.map { (key, value) ->
-                    InfoItem(key, value)
-                }
-            )
-        }
-
         // 底部留白
         Spacer(modifier = Modifier.height(16.dp))
     }

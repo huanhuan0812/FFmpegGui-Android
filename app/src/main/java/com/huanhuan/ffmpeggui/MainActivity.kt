@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
@@ -116,6 +117,7 @@ fun FFmpegApp() {
         currentRoute == "tutorial" -> "FFmpeg 命令教程"
         currentRoute == "audio/info" -> "音频信息"
         currentRoute == "video/info" -> "视频信息"
+        currentRoute == "audio/tag_edit" -> "标签编辑"
         currentRoute?.startsWith("video/") == true -> {
             when (currentRoute) {
                 "video/convert" -> "视频转换"
@@ -129,6 +131,7 @@ fun FFmpegApp() {
             when (currentRoute) {
                 "audio/convert" -> "音频转换"
                 "audio/info" -> "音频信息"
+                "audio/tag_edit" -> "标签编辑"
                 else -> "音频处理"
             }
         }
@@ -148,20 +151,15 @@ fun FFmpegApp() {
             currentRoute != "audio" &&
             currentRoute != "image" &&
             currentRoute != "advanced" &&
-            currentRoute != "audio/info" &&
-            currentRoute != "video/info" &&
-            currentRoute !in listOf("about", "tutorial", null)
+            currentRoute != "about" &&
+            currentRoute != "tutorial" &&
+            currentRoute != null
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(screenTitle) },
                 actions = {
-                    // 教程页面显示展开/折叠全部按钮
-                    if (currentRoute == "tutorial") {
-                        // 这个按钮由 TutorialScreen 自己控制，这里不添加
-                    }
-                    // 主页面的关于按钮
                     if (currentRoute in listOf("history", "video", "audio", "image", "advanced")) {
                         IconButton(onClick = {
                             navController.navigate("about")
@@ -181,6 +179,7 @@ fun FFmpegApp() {
                                 currentRoute == "tutorial" -> navController.popBackStack()
                                 currentRoute == "audio/info" -> navController.popBackStack()
                                 currentRoute == "video/info" -> navController.popBackStack()
+                                currentRoute == "audio/tag_edit" -> navController.popBackStack()
                                 else -> navController.popBackStack()
                             }
                         }) {
@@ -191,12 +190,12 @@ fun FFmpegApp() {
             )
         },
         bottomBar = {
-            // 底部导航栏 - 只在主页面和二级页面显示（教程、关于、结果页面不显示）
             val shouldShowBottomBar = currentRoute != null &&
                     currentRoute != "tutorial" &&
                     currentRoute != "about" &&
                     currentRoute != "audio/info" &&
                     currentRoute != "video/info" &&
+                    currentRoute != "audio/tag_edit" &&
                     !currentRoute.startsWith("result/")
 
             if (shouldShowBottomBar) {
@@ -252,12 +251,10 @@ fun FFmpegApp() {
                         onBack = { navController.popBackStack() },
                         onNavigateToResult = { outputPath ->
                             try {
-                                // 使用 URLEncoder 编码路径，确保特殊字符被正确处理
                                 val encodedPath = URLEncoder.encode(outputPath, "UTF-8")
                                 navController.navigate("result/$encodedPath")
                             } catch (e: Exception) {
                                 Log.e("MainActivity", "编码路径失败: ${e.message}")
-                                // 如果编码失败，使用 Uri.encode 作为备选
                                 val encodedPath = Uri.encode(outputPath)
                                 navController.navigate("result/$encodedPath")
                             }
@@ -266,7 +263,7 @@ fun FFmpegApp() {
                     )
                 }
 
-                // 视频主界面 - 包含视频相关的二级功能
+                // 视频主界面
                 composable("video") {
                     VideoMainScreen(
                         navController = navController,
@@ -274,7 +271,7 @@ fun FFmpegApp() {
                     )
                 }
 
-                // 音频主界面 - 包含音频相关的二级功能
+                // 音频主界面
                 composable("audio") {
                     AudioMainScreen(
                         navController = navController,
@@ -282,7 +279,7 @@ fun FFmpegApp() {
                     )
                 }
 
-                // 图像主界面 - 包含图像相关的二级功能
+                // 图像主界面
                 composable("image") {
                     ImageMainScreen(
                         navController = navController,
@@ -299,7 +296,9 @@ fun FFmpegApp() {
                     )
                 }
 
-                // 视频转换界面（二级页面）
+                // ============================================================
+                // 视频功能
+                // ============================================================
                 composable("video/convert") {
                     VideoConvertScreen(
                         navController = navController,
@@ -308,7 +307,6 @@ fun FFmpegApp() {
                     )
                 }
 
-                // 视频转GIF界面（二级页面）
                 composable("video/gifconvert") {
                     VideoToGifScreen(
                         navController = navController,
@@ -317,7 +315,6 @@ fun FFmpegApp() {
                     )
                 }
 
-                // 音频提取界面（二级页面）
                 composable("video/extract") {
                     AudioExtractScreen(
                         navController = navController,
@@ -326,7 +323,17 @@ fun FFmpegApp() {
                     )
                 }
 
-                // 音频转换界面（二级页面）
+                composable("video/info") {
+                    VideoInfoScreen(
+                        onBack = { navController.popBackStack() },
+                        navController = navController,
+                        viewModel = viewModel
+                    )
+                }
+
+                // ============================================================
+                // 音频功能
+                // ============================================================
                 composable("audio/convert") {
                     AudioConvertScreen(
                         navController = navController,
@@ -335,9 +342,6 @@ fun FFmpegApp() {
                     )
                 }
 
-                // ============================================================
-                // 新增：音频信息界面
-                // ============================================================
                 composable("audio/info") {
                     AudioInfoScreen(
                         onBack = { navController.popBackStack() },
@@ -347,17 +351,19 @@ fun FFmpegApp() {
                 }
 
                 // ============================================================
-                // 新增：视频信息界面
+                // 新增：音频标签编辑
                 // ============================================================
-                composable("video/info") {
-                    VideoInfoScreen(
+                composable("audio/tag_edit") {
+                    AudioTagEditScreen(
                         onBack = { navController.popBackStack() },
                         navController = navController,
                         viewModel = viewModel
                     )
                 }
 
-                // 图像转换界面（二级页面）
+                // ============================================================
+                // 图像功能
+                // ============================================================
                 composable("image/convert") {
                     ImageConvertScreen(
                         navController = navController,
@@ -366,14 +372,15 @@ fun FFmpegApp() {
                     )
                 }
 
-                // 关于界面
+                // ============================================================
+                // 其他页面
+                // ============================================================
                 composable("about") {
                     AboutScreen(
                         onBack = { navController.navigate("history") }
                     )
                 }
 
-                // 教程界面
                 composable("tutorial") {
                     FFmpegTutorialScreen(
                         navController = navController,
@@ -382,22 +389,19 @@ fun FFmpegApp() {
                     )
                 }
 
-                // 结果界面 - 接收编码后的路径并解码
                 composable(
                     "result/{outputPath}",
                     arguments = listOf(navArgument("outputPath") { type = NavType.StringType })
                 ) { backStackEntry ->
                     val encodedPath = backStackEntry.arguments?.getString("outputPath") ?: ""
-                    // 解码路径
                     val outputPath = try {
                         URLDecoder.decode(encodedPath, "UTF-8")
                     } catch ( _ : Exception) {
-                        // 如果 URLDecoder 失败，尝试使用 Uri.decode
                         try {
                             Uri.decode(encodedPath)
                         } catch (e2: Exception) {
                             Log.e("MainActivity", "解码路径失败: ${e2.message}")
-                            encodedPath // 如果都失败，使用原值
+                            encodedPath
                         }
                     }
                     ResultScreen(
@@ -411,7 +415,9 @@ fun FFmpegApp() {
     }
 }
 
-// 视频功能数据类
+// ============================================================
+// 视频功能
+// ============================================================
 data class VideoFeature(
     val id: String,
     val title: String,
@@ -419,7 +425,6 @@ data class VideoFeature(
     var route: String
 )
 
-// 视频主界面 - 卡片式二级菜单
 @Composable
 fun VideoMainScreen(
     navController: androidx.navigation.NavController,
@@ -429,7 +434,7 @@ fun VideoMainScreen(
         VideoFeature("convert", "视频转换", Icons.Default.VideoLibrary, "video/convert"),
         VideoFeature("gifconvert", "视频转GIF", Icons.Default.Movie, "video/gifconvert"),
         VideoFeature("extract", "音频提取", Icons.Default.Audiotrack, "video/extract"),
-        VideoFeature("info", "视频信息", Icons.Default.Info, "video/info")  // 新增：视频信息入口
+        VideoFeature("info", "视频信息", Icons.Default.Info, "video/info")
     )
 
     FeatureListScreen(
@@ -438,7 +443,9 @@ fun VideoMainScreen(
     )
 }
 
-// 音频功能数据类
+// ============================================================
+// 音频功能
+// ============================================================
 data class AudioFeature(
     val id: String,
     val title: String,
@@ -446,7 +453,6 @@ data class AudioFeature(
     val route: String
 )
 
-// 音频主界面 - 卡片式二级菜单
 @Composable
 fun AudioMainScreen(
     navController: androidx.navigation.NavController,
@@ -454,7 +460,8 @@ fun AudioMainScreen(
 ) {
     val features = listOf(
         AudioFeature("convert", "音频转换", Icons.Default.MusicNote, "audio/convert"),
-        AudioFeature("info", "音频信息", Icons.Default.Info, "audio/info")  // 新增音频信息入口
+        AudioFeature("info", "音频信息", Icons.Default.Info, "audio/info"),
+        AudioFeature("tag_edit", "标签编辑", Icons.Default.Edit, "audio/tag_edit")  // 新增
     )
 
     FeatureListScreen(
@@ -463,7 +470,9 @@ fun AudioMainScreen(
     )
 }
 
-// 图像功能数据类
+// ============================================================
+// 图像功能
+// ============================================================
 data class ImageFeature(
     val id: String,
     val title: String,
@@ -471,7 +480,6 @@ data class ImageFeature(
     val route: String
 )
 
-// 图像主界面 - 卡片式二级菜单
 @Composable
 fun ImageMainScreen(
     navController: androidx.navigation.NavController,
@@ -487,7 +495,9 @@ fun ImageMainScreen(
     )
 }
 
-// 通用的功能列表界面
+// ============================================================
+// 通用功能列表
+// ============================================================
 @Composable
 fun FeatureListScreen(
     features: List<Any>,
@@ -524,7 +534,9 @@ fun FeatureListScreen(
     }
 }
 
-// 功能卡片组件
+// ============================================================
+// 功能卡片
+// ============================================================
 @Composable
 fun FeatureCard(
     title: String,
@@ -574,7 +586,9 @@ fun FeatureCard(
     }
 }
 
-// 底部导航项数据类
+// ============================================================
+// 底部导航项
+// ============================================================
 data class BottomNavItem(
     val title: String,
     val route: String,

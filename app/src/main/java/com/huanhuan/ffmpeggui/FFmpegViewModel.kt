@@ -186,11 +186,19 @@ class FFmpegViewModel : ViewModel() {
                     currentTimeMs = timeInMilliseconds
 
                     if (totalDurationMs > 0) {
-                        progress = (timeInMilliseconds.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 0.99f)
+                        progress =
+                            (timeInMilliseconds.toFloat() / totalDurationMs.toFloat()).coerceIn(
+                                0f,
+                                0.99f
+                            )
                     } else {
                         val frameNumber = statistics.videoFrameNumber
                         if (estimatedTotalFrames > 0 && frameNumber > 0) {
-                            progress = (frameNumber.toFloat() / estimatedTotalFrames.toFloat()).coerceIn(0f, 0.99f)
+                            progress =
+                                (frameNumber.toFloat() / estimatedTotalFrames.toFloat()).coerceIn(
+                                    0f,
+                                    0.99f
+                                )
                         } else {
                             if (frameNumber > 0) {
                                 progress = ((frameNumber % 100) / 100f) * 0.8f + 0.1f
@@ -227,7 +235,8 @@ class FFmpegViewModel : ViewModel() {
                 currentTimeMs = (currentTimeInSeconds * 1000).toDouble()
 
                 if (totalDurationMs > 0) {
-                    progress = (currentTimeMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 0.99f)
+                    progress =
+                        (currentTimeMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 0.99f)
                 }
             } catch (_: NumberFormatException) {
                 // 忽略
@@ -241,7 +250,8 @@ class FFmpegViewModel : ViewModel() {
             try {
                 val frameNumber = it.groupValues[1].toInt()
                 if (estimatedTotalFrames > 0 && frameNumber > 0) {
-                    progress = (frameNumber.toFloat() / estimatedTotalFrames.toFloat()).coerceIn(0f, 0.99f)
+                    progress =
+                        (frameNumber.toFloat() / estimatedTotalFrames.toFloat()).coerceIn(0f, 0.99f)
                 }
             } catch (_: NumberFormatException) {
                 // 忽略
@@ -420,13 +430,15 @@ class FFmpegViewModel : ViewModel() {
                     commandList.add("-b:a")
                     commandList.add(bitrate)
                 }
+
                 "ogg" -> {
                     commandList.add("-b:a")
                     commandList.add(bitrate)
                     commandList.add("-compression_level")
                     commandList.add("10")
                     when {
-                        bitrate.endsWith("k") && bitrate.substring(0, bitrate.length - 1).toIntOrNull()
+                        bitrate.endsWith("k") && bitrate.substring(0, bitrate.length - 1)
+                            .toIntOrNull()
                             ?.let { it <= 96 } == true -> {
                             commandList.add("-application")
                             commandList.add("lowdelay")
@@ -1030,7 +1042,6 @@ class FFmpegViewModel : ViewModel() {
         val codecLongName: String,
         val bitDepth: String? = null,
         val streamCount: Int = 0,
-        val metadata: Map<String, String> = emptyMap(),
         val isVideoPresent: Boolean = false,
         val formatName: String = ""
     )
@@ -1091,10 +1102,26 @@ class FFmpegViewModel : ViewModel() {
                 val channelLayout = audioStream.channelLayout
                 val channelsFormatted = when {
                     channelLayout.isNullOrBlank() -> "未知"
-                    channelLayout.equals("mono", ignoreCase = true) || channelLayout == "1" -> "单声道 (1)"
-                    channelLayout.equals("stereo", ignoreCase = true) || channelLayout == "2" -> "立体声 (2)"
-                    channelLayout.equals("5.1", ignoreCase = true) || channelLayout == "6" -> "5.1 声道 (6)"
-                    channelLayout.equals("7.1", ignoreCase = true) || channelLayout == "8" -> "7.1 声道 (8)"
+                    channelLayout.equals(
+                        "mono",
+                        ignoreCase = true
+                    ) || channelLayout == "1" -> "单声道 (1)"
+
+                    channelLayout.equals(
+                        "stereo",
+                        ignoreCase = true
+                    ) || channelLayout == "2" -> "立体声 (2)"
+
+                    channelLayout.equals(
+                        "5.1",
+                        ignoreCase = true
+                    ) || channelLayout == "6" -> "5.1 声道 (6)"
+
+                    channelLayout.equals(
+                        "7.1",
+                        ignoreCase = true
+                    ) || channelLayout == "8" -> "7.1 声道 (8)"
+
                     else -> {
                         val numberMatch = Regex("\\d+").find(channelLayout)
                         if (numberMatch != null) {
@@ -1226,7 +1253,11 @@ class FFmpegViewModel : ViewModel() {
         return when {
             sizeBytes < 1024 -> "${sizeBytes} B"
             sizeBytes < 1024 * 1024 -> String.format("%.2f KB", sizeBytes / 1024.0)
-            sizeBytes < 1024 * 1024 * 1024 -> String.format("%.2f MB", sizeBytes / (1024.0 * 1024.0))
+            sizeBytes < 1024 * 1024 * 1024 -> String.format(
+                "%.2f MB",
+                sizeBytes / (1024.0 * 1024.0)
+            )
+
             else -> String.format("%.2f GB", sizeBytes / (1024.0 * 1024.0 * 1024.0))
         }
     }
@@ -1258,7 +1289,6 @@ class FFmpegViewModel : ViewModel() {
         val hdr: Boolean = false,
         val hasAudio: Boolean = false,
         val streamCount: Int = 0,
-        val metadata: Map<String, String> = emptyMap(),
         val formatName: String = ""
     )
 
@@ -1311,12 +1341,13 @@ class FFmpegViewModel : ViewModel() {
                 val resolution = if (width > 0 && height > 0) "${width}x${height}" else "未知"
 
                 // 解析帧率
-                val frameRate = videoStream.realFrameRate?: ""
+                val frameRate = videoStream.realFrameRate ?: ""
                 val frameRateFormatted = if (frameRate.isNotBlank()) {
                     try {
                         val parts = frameRate.split('/')
                         if (parts.size == 2) {
-                            val fps = parts[0].toDoubleOrNull()?.div(parts[1].toDoubleOrNull() ?: 1.0)
+                            val fps =
+                                parts[0].toDoubleOrNull()?.div(parts[1].toDoubleOrNull() ?: 1.0)
                             if (fps != null && fps > 0) {
                                 String.format("%.2f fps", fps)
                             } else {
@@ -1338,8 +1369,6 @@ class FFmpegViewModel : ViewModel() {
 
                 // 解析像素格式
                 val pixelFormat = videoStream.getStringProperty("pix_fmt") ?: "未知"
-
-
 
                 // 解析色彩空间
                 val colorSpace = videoStream.getStringProperty("color_space") ?: "未知"
@@ -1396,10 +1425,26 @@ class FFmpegViewModel : ViewModel() {
                 val channelLayout = audioStream?.channelLayout
                 val channelsFormatted = when {
                     channelLayout.isNullOrBlank() -> "未知"
-                    channelLayout.equals("mono", ignoreCase = true) || channelLayout == "1" -> "单声道 (1)"
-                    channelLayout.equals("stereo", ignoreCase = true) || channelLayout == "2" -> "立体声 (2)"
-                    channelLayout.equals("5.1", ignoreCase = true) || channelLayout == "6" -> "5.1 声道 (6)"
-                    channelLayout.equals("7.1", ignoreCase = true) || channelLayout == "8" -> "7.1 声道 (8)"
+                    channelLayout.equals(
+                        "mono",
+                        ignoreCase = true
+                    ) || channelLayout == "1" -> "单声道 (1)"
+
+                    channelLayout.equals(
+                        "stereo",
+                        ignoreCase = true
+                    ) || channelLayout == "2" -> "立体声 (2)"
+
+                    channelLayout.equals(
+                        "5.1",
+                        ignoreCase = true
+                    ) || channelLayout == "6" -> "5.1 声道 (6)"
+
+                    channelLayout.equals(
+                        "7.1",
+                        ignoreCase = true
+                    ) || channelLayout == "8" -> "7.1 声道 (8)"
+
                     else -> {
                         val numberMatch = Regex("\\d+").find(channelLayout)
                         if (numberMatch != null) {
@@ -1443,7 +1488,6 @@ class FFmpegViewModel : ViewModel() {
                     hdr = hdr,
                     hasAudio = audioStream != null,
                     streamCount = streams.size,
-                    metadata = emptyMap(),
                     formatName = formatName
                 )
 
@@ -1452,5 +1496,251 @@ class FFmpegViewModel : ViewModel() {
                 return@withContext null
             }
         }
+    }
+
+    // ============================================================
+// 音频元数据相关
+// ============================================================
+
+    /**
+     * 获取音频文件的元数据（标签信息）
+     */
+    suspend fun getAudioMetadata(filePath: String): Map<String, String>? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val mediaInfoSession = FFprobeKit.getMediaInformation(filePath)
+                val mediaInformation = mediaInfoSession.mediaInformation
+                if (mediaInformation == null) {
+                    Log.e("FFmpegViewModel", "无法获取媒体信息: ${mediaInfoSession.failStackTrace}")
+                    return@withContext null
+                }
+
+                // 获取所有元数据标签 (JSONObject)
+                val tags = mediaInformation.tags
+                if (tags == null || tags.length() == 0) {
+                    return@withContext emptyMap()
+                }
+
+                val result = mutableMapOf<String, String>()
+                val keys = tags.keys()
+
+                // ============================================================
+                // 扩展标签映射 - 支持更多标准标签
+                // ============================================================
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val value = tags.optString(key, "")
+                    if (value.isNotEmpty()) {
+                        when (key.lowercase()) {
+                            // 基本标签
+                            "title" -> result["title"] = value
+                            "artist" -> result["artist"] = value
+                            "album" -> result["album"] = value
+                            "album_artist", "albumartist" -> result["album_artist"] = value
+                            "date", "year" -> result["year"] = value
+                            "genre" -> result["genre"] = value
+                            "track", "tracknumber" -> result["track"] = value
+                            "tracktotal" -> result["tracktotal"] = value
+                            "disc", "discnumber" -> result["disc"] = value
+                            "disctotal" -> result["disctotal"] = value
+                            "comment" -> result["comment"] = value
+                            "composer" -> result["composer"] = value
+                            "encoder" -> result["encoder"] = value
+
+                            // 扩展标签
+                            "performer" -> result["performer"] = value
+                            "lyricist" -> result["lyricist"] = value
+                            "arranger" -> result["arranger"] = value
+                            "conductor" -> result["conductor"] = value
+                            "orchestra" -> result["orchestra"] = value
+                            "ensemble" -> result["ensemble"] = value
+
+                            "bpm" -> result["bpm"] = value
+                            "tempo" -> result["tempo"] = value
+                            "key" -> result["key"] = value
+                            "mood" -> result["mood"] = value
+
+                            "copyright" -> result["copyright"] = value
+                            "license" -> result["license"] = value
+                            "organization" -> result["organization"] = value
+                            "publisher" -> result["publisher"] = value
+
+                            "isrc" -> result["isrc"] = value
+                            "iswc" -> result["iswc"] = value
+                            "catalognumber", "catalog_number" -> result["catalognumber"] = value
+
+                            "url" -> result["url"] = value
+                            "website" -> result["website"] = value
+
+                            "language" -> result["language"] = value
+                            "lyrics" -> result["lyrics"] = value
+
+                            "description" -> result["description"] = value
+                            "synopsis" -> result["synopsis"] = value
+
+                            "artist_sort" -> result["artist_sort"] = value
+                            "album_sort" -> result["album_sort"] = value
+                            "title_sort" -> result["title_sort"] = value
+
+                            "rating" -> result["rating"] = value
+                            "acoustid_id" -> result["acoustid"] = value
+                            "musicbrainz_track_id" -> result["musicbrainz_track_id"] = value
+                            "musicbrainz_album_id" -> result["musicbrainz_album_id"] = value
+                            "musicbrainz_artist_id" -> result["musicbrainz_artist_id"] = value
+                            "musicbrainz_releasegroup_id" -> result["musicbrainz_releasegroup_id"] = value
+
+                            "replaygain_track_gain" -> result["replaygain_track_gain"] = value
+                            "replaygain_track_peak" -> result["replaygain_track_peak"] = value
+                            "replaygain_album_gain" -> result["replaygain_album_gain"] = value
+                            "replaygain_album_peak" -> result["replaygain_album_peak"] = value
+
+                            "initial_key" -> result["initial_key"] = value
+                            "remixer" -> result["remixer"] = value
+                            "producer" -> result["producer"] = value
+                            "engineer" -> result["engineer"] = value
+                            "studio" -> result["studio"] = value
+                            "location" -> result["location"] = value
+
+                            "compilation" -> result["compilation"] = value
+                            "podcast" -> result["podcast"] = value
+                            "podcasturl" -> result["podcasturl"] = value
+                            "podcastcategory" -> result["podcastcategory"] = value
+
+                            "gapless" -> result["gapless"] = value
+                            "media" -> result["media"] = value
+                            "original_date" -> result["original_date"] = value
+                            "original_year" -> result["original_year"] = value
+                        }
+                    }
+                }
+
+                // 补充字段（如果日期存在但年份不存在）
+                if (!result.containsKey("year")) {
+                    tags.optString("date", "").takeIf { it.isNotEmpty() }?.let {
+                        // 提取年份（如 "2024-01-01" -> "2024"）
+                        val yearMatch = Regex("\\d{4}").find(it)
+                        if (yearMatch != null) {
+                            result["year"] = yearMatch.value
+                        } else {
+                            result["year"] = it
+                        }
+                    }
+                }
+
+                return@withContext result
+            } catch (e: Exception) {
+                Log.e("FFmpegViewModel", "获取音频元数据失败", e)
+                return@withContext null
+            }
+        }
+    }
+
+    /**
+     * 编辑音频标签（元数据）- 支持完整标签集
+     */
+    fun editAudioTags(
+        inputPath: String,
+        outputPath: String,
+        metadata: Map<String, String>,
+        coverPath: String? = null,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        // 构建 FFmpeg 命令
+        val command = buildString {
+            append("-i \"$inputPath\"")
+            if (coverPath != null && File(coverPath).exists()) {
+                append(" -i \"$coverPath\"")
+            }
+
+            // 添加所有元数据（支持更多标签）
+            metadata.forEach { (key, value) ->
+                if (value.isNotBlank()) {
+                    // 将内部键名映射到 FFmpeg 元数据键名
+                    val ffmpegKey = when (key) {
+                        "album_artist" -> "album_artist"
+                        "tracktotal" -> "tracktotal"
+                        "disc" -> "disc"
+                        "disctotal" -> "disctotal"
+                        "performer" -> "performer"
+                        "lyricist" -> "lyricist"
+                        "arranger" -> "arranger"
+                        "conductor" -> "conductor"
+                        "orchestra" -> "orchestra"
+                        "ensemble" -> "ensemble"
+                        "bpm" -> "bpm"
+                        "tempo" -> "tempo"
+                        "key" -> "key"
+                        "mood" -> "mood"
+                        "copyright" -> "copyright"
+                        "license" -> "license"
+                        "organization" -> "organization"
+                        "publisher" -> "publisher"
+                        "isrc" -> "isrc"
+                        "iswc" -> "iswc"
+                        "catalognumber" -> "catalognumber"
+                        "url" -> "url"
+                        "website" -> "website"
+                        "language" -> "language"
+                        "lyrics" -> "lyrics"
+                        "description" -> "description"
+                        "synopsis" -> "synopsis"
+                        "artist_sort" -> "artist_sort"
+                        "album_sort" -> "album_sort"
+                        "title_sort" -> "title_sort"
+                        "rating" -> "rating"
+                        "acoustid" -> "acoustid_id"
+                        "musicbrainz_track_id" -> "musicbrainz_track_id"
+                        "musicbrainz_album_id" -> "musicbrainz_album_id"
+                        "musicbrainz_artist_id" -> "musicbrainz_artist_id"
+                        "musicbrainz_releasegroup_id" -> "musicbrainz_releasegroup_id"
+                        "replaygain_track_gain" -> "replaygain_track_gain"
+                        "replaygain_track_peak" -> "replaygain_track_peak"
+                        "replaygain_album_gain" -> "replaygain_album_gain"
+                        "replaygain_album_peak" -> "replaygain_album_peak"
+                        "initial_key" -> "initial_key"
+                        "remixer" -> "remixer"
+                        "producer" -> "producer"
+                        "engineer" -> "engineer"
+                        "studio" -> "studio"
+                        "location" -> "location"
+                        "compilation" -> "compilation"
+                        "podcast" -> "podcast"
+                        "podcasturl" -> "podcasturl"
+                        "podcastcategory" -> "podcastcategory"
+                        "gapless" -> "gapless"
+                        "media" -> "media"
+                        "original_date" -> "original_date"
+                        "original_year" -> "original_year"
+                        else -> key  // 直接使用原键名
+                    }
+                    append(" -metadata $ffmpegKey=\"${value.replace("\"", "\\\"")}\"")
+                }
+            }
+
+            // 如果提供了封面，映射流并设置封面
+            if (coverPath != null && File(coverPath).exists()) {
+                append(" -map 0:a")  // 音频流
+                append(" -map 1")    // 封面图片流
+                append(" -c copy")   // 全部复制（不重新编码）
+                append(" -metadata:s:v title=\"Cover\"")
+                append(" -disposition:v attached_pic")
+            } else {
+                append(" -c:a copy")
+                append(" -vn")  // 禁止视频
+            }
+            append(" -y \"$outputPath\"")
+        }
+
+        val taskId = UUID.randomUUID().toString()
+        val taskType = "标签编辑"
+
+        executeFFmpegCommand(
+            command = command,
+            taskId = taskId,
+            type = taskType,
+            inputPath = inputPath,
+            outputPath = outputPath,
+            onComplete = onComplete
+        )
     }
 }

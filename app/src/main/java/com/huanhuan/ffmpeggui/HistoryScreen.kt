@@ -37,8 +37,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -50,20 +53,31 @@ fun HistoryScreen(
     onNavigateToResult: (String) -> Unit,
     viewModel: FFmpegViewModel = viewModel()
 ) {
+    val context = LocalContext.current
+
+    // 初始化数据库（如果还未初始化）
     LaunchedEffect(Unit) {
-        viewModel.processingEvents.collect { event ->
-            // 自动更新历史记录列表
+        viewModel.initDatabase(context)
+    }
+
+    // 监听处理事件，自动刷新历史列表
+    LaunchedEffect(Unit) {
+        viewModel.processingEvents.collectLatest { event ->
+            // 当有事件发生时，延迟一点刷新历史列表
+            delay(500)
+            viewModel.loadHistory()
         }
     }
 
     var showClearAllDialog by remember { mutableStateOf(false) }
     var showClearCompletedDialog by remember { mutableStateOf(false) }
     var taskToDelete by remember { mutableStateOf<ConversionTask?>(null) }
+    var showFileNotExistDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        // 操作按钮行 - 移到内容区域顶部
+        // 操作按钮行
         if (viewModel.historyTasks.isNotEmpty()) {
             Row(
                 modifier = Modifier
@@ -142,8 +156,17 @@ fun HistoryScreen(
                             task = task,
                             onDeleteClick = { taskToDelete = task },
                             onItemClick = {
-                                if (File(task.outputPath).exists()) {
-                                    onNavigateToResult(task.outputPath)
+                                try {
+                                    // 使用统一的文件检查工具
+                                    val fileExists = fileExistsCompat(context, task.outputPath)
+                                    if (fileExists) {
+                                        onNavigateToResult(task.outputPath)
+                                    } else {
+                                        showFileNotExistDialog = true
+                                    }
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    showFileNotExistDialog = true
                                 }
                             }
                         )
@@ -153,18 +176,41 @@ fun HistoryScreen(
         }
     }
 
+    // 文件不存在提示对话框
+    if (showFileNotExistDialog) {
+        AlertDialog(
+            onDismissRequest = { showFileNotExistDialog = false },
+            title = { Text("文件不存在") },
+            text = { Text("该输出文件已被删除或移动，无法查看结果。") },
+            confirmButton = {
+                TextButton(onClick = { showFileNotExistDialog = false }) {
+                    Text("确定")
+                }
+            }
+        )
+    }
+
     // 删除单个项目的确认对话框
     if (taskToDelete != null) {
         AlertDialog(
             onDismissRequest = { taskToDelete = null },
             title = { Text("删除历史记录") },
             text = {
-                Text("确定要删除这条记录及其对应的输出文件吗？\n\n文件：${File(taskToDelete!!.outputPath).name}")
+                val fileName = try {
+                    File(taskToDelete!!.outputPath).name
+                } catch (e: Exception) {
+                    "未知文件"
+                }
+                Text("确定要删除这条记录及其对应的输出文件吗？\n\n文件：$fileName")
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.clearHistoryItem(taskToDelete!!)
+                        try {
+                            viewModel.clearHistoryItem(taskToDelete!!)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
                         taskToDelete = null
                     }
                 ) {
@@ -190,7 +236,11 @@ fun HistoryScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.clearAllHistory()
+                        try {
+                            viewModel.clearAllHistory()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
                         showClearAllDialog = false
                     }
                 ) {
@@ -212,12 +262,16 @@ fun HistoryScreen(
             onDismissRequest = { showClearCompletedDialog = false },
             title = { Text("清理已完成文件") },
             text = {
-                Text("确定要删除所有已完成任务的输出文件吗？\n\n共 ${completedCount} 个文件\n\n（历史记录将保留）")
+                Text("确定要删除所有已完成任务的输出文件吗？\n\n共 $completedCount 个文件\n\n（历史记录将保留）")
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.clearCompletedOutputFiles()
+                        try {
+                            viewModel.clearCompletedOutputFiles()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
                         showClearCompletedDialog = false
                     }
                 ) {
@@ -239,10 +293,54 @@ fun HistoryItem(
     onDeleteClick: () -> Unit,
     onItemClick: () -> Unit
 ) {
+    val context = LocalContext.current
+
+    // 使用统一的文件检查工具，并添加异常处理
+    val outputFileExists = remember(task.outputPath, context) {
+        try {
+            fileExistsCompat(context, task.outputPath)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    // 缓存文件名，避免重复创建File对象
+    val inputFileName = remember(task.inputPath) {
+        try {
+            if (task.inputPath.isNotEmpty()) {
+                File(task.inputPath).name
+            } else {
+                "未知文件"
+            }
+        } catch (e: Exception) {
+            "未知文件"
+        }
+    }
+
+    val outputFileName = remember(task.outputPath) {
+        try {
+            if (task.outputPath.isNotEmpty()) {
+                File(task.outputPath).name
+            } else {
+                "未知文件"
+            }
+        } catch (e: Exception) {
+            "未知文件"
+        }
+    }
+
+    // 根据文件是否存在决定点击行为
+    val canClick = outputFileExists
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onItemClick() }
+            .clickable(enabled = canClick) {
+                if (canClick) {
+                    onItemClick()
+                }
+            }
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -263,6 +361,7 @@ fun HistoryItem(
                         color = when (task.status) {
                             "完成" -> MaterialTheme.colorScheme.primaryContainer
                             "失败" -> MaterialTheme.colorScheme.errorContainer
+                            "已取消" -> MaterialTheme.colorScheme.secondaryContainer
                             else -> MaterialTheme.colorScheme.secondaryContainer
                         },
                         shape = MaterialTheme.shapes.small
@@ -274,6 +373,7 @@ fun HistoryItem(
                             color = when (task.status) {
                                 "完成" -> MaterialTheme.colorScheme.onPrimaryContainer
                                 "失败" -> MaterialTheme.colorScheme.onErrorContainer
+                                "已取消" -> MaterialTheme.colorScheme.onSecondaryContainer
                                 else -> MaterialTheme.colorScheme.onSecondaryContainer
                             }
                         )
@@ -297,16 +397,20 @@ fun HistoryItem(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            // 显示输入文件名
             Text(
-                text = "输入: ${File(task.inputPath).name}",
+                text = "输入: $inputFileName",
                 style = MaterialTheme.typography.bodySmall,
-                maxLines = 1
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
 
+            // 显示输出文件名
             Text(
-                text = "输出: ${File(task.outputPath).name}",
+                text = "输出: $outputFileName",
                 style = MaterialTheme.typography.bodySmall,
-                maxLines = 1
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -316,37 +420,87 @@ fun HistoryItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // 开始时间
                 Text(
                     text = formatTimestamp(task.startTime),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
                 )
 
-                if (task.endTime != null) {
-                    val duration = ((task.endTime ?: 0) - (task.startTime)) / 1000
+                // ========== 修改：耗时显示逻辑 ==========
+                val endTimeValue = task.endTime
+                if (endTimeValue != null && endTimeValue > 0 && endTimeValue > task.startTime) {
+                    val duration = (endTimeValue - task.startTime) / 1000
                     Text(
                         text = "耗时: ${duration}s",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline
                     )
+                } else {
+                    // 根据状态显示不同内容
+                    when (task.status) {
+                        "进行中", "处理中" -> {
+                            Text(
+                                text = "处理中...",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        "完成" -> {
+                            // 对于完成但没有耗时的任务（旧数据），显示 "-"
+                            Text(
+                                text = "耗时: -",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                        else -> {
+                            Text(
+                                text = "",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
                 }
 
-                if (task.status == "完成") {
-                    LinearProgressIndicator(
-                        progress = { task.progress },
-                        modifier = Modifier
-                            .width(80.dp)
-                            .height(4.dp),
-                        color = ProgressIndicatorDefaults.linearColor,
-                        trackColor = ProgressIndicatorDefaults.linearTrackColor,
-                        strokeCap = ProgressIndicatorDefaults.LinearStrokeCap,
-                    )
-                } else if (!File(task.outputPath).exists() && task.status == "完成") {
-                    Text(
-                        text = "文件已删除",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
+                // 进度指示器
+                when {
+                    task.status == "完成" && outputFileExists -> {
+                        LinearProgressIndicator(
+                            progress = { 1.0f },
+                            modifier = Modifier
+                                                        .width(80.dp)
+                                                        .height(4.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                            strokeCap = ProgressIndicatorDefaults.LinearStrokeCap,
+                        )
+                    }
+
+                    task.status == "完成" && !outputFileExists -> {
+                        Text(
+                            text = "文件已删除",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
+                    task.status == "进行中" || task.status == "处理中" -> {
+                        LinearProgressIndicator(
+                            progress = { task.progress.coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                                        .width(80.dp)
+                                                        .height(4.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                            strokeCap = ProgressIndicatorDefaults.LinearStrokeCap,
+                        )
+                    }
+
+                    else -> {
+                        Spacer(modifier = Modifier.width(80.dp))
+                    }
                 }
             }
         }
@@ -354,7 +508,14 @@ fun HistoryItem(
 }
 
 fun formatTimestamp(timestamp: Long): String {
-    val date = Date(timestamp)
-    val format = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
-    return format.format(date)
+    return try {
+        if (timestamp <= 0) {
+            return "未知时间"
+        }
+        val date = Date(timestamp)
+        val format = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+        format.format(date)
+    } catch (e: Exception) {
+        "未知时间"
+    }
 }

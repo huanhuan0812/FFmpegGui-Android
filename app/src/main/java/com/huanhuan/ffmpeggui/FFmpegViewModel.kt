@@ -1,6 +1,7 @@
 package com.huanhuan.ffmpeggui
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
@@ -47,32 +48,44 @@ data class ConversionTask(
     var endTime: Long? = null
 )
 
+// ============================================================
+// 修改：toHistory() - 添加 inputPath 和 endTime 字段
+// ============================================================
 fun ConversionTask.toHistory(): History {
     return History(
         id = this.endTime ?: this.startTime,
         key = this.id,
         name = "${this.type} - ${File(this.outputPath).name}",
         path = this.outputPath,
+        inputPath = this.inputPath,  // 新增：保存输入路径
         timestamp = this.endTime ?: this.startTime,
         createdAt = this.startTime,
-        size = File(this.outputPath).length().toInt()
+        endTime = this.endTime ?: 0L,  // 新增：保存结束时间
+        size = try {
+            File(this.outputPath).length().toInt()
+        } catch (e: Exception) {
+            0
+        }
     )
 }
 
+// ============================================================
+// 修改：toConversionTask() - 读取 inputPath 和 endTime 字段
+// ============================================================
 fun History.toConversionTask(): ConversionTask {
     return ConversionTask(
         id = this.key,
-        inputPath = "",
+        inputPath = this.inputPath,  // 新增：读取输入路径
         outputPath = this.path,
         type = try {
             this.name.substringBefore(" - ")
-        } catch ( _ : Exception) {
+        } catch (_: Exception) {
             "未知类型"
         },
         status = "完成",
         progress = 1f,
         startTime = this.createdAt,
-        endTime = this.timestamp
+        endTime = if (this.endTime > 0) this.endTime else null  // 新增：读取结束时间
     )
 }
 
@@ -108,6 +121,7 @@ class FFmpegViewModel : ViewModel() {
     private var estimatedTotalFrames by mutableIntStateOf(0)
 
     private var database: HistoryDatabase? = null
+    private var appContext: Context? = null
 
     // 执行命令相关的状态
     private val _executionResult = MutableStateFlow("")
@@ -123,12 +137,29 @@ class FFmpegViewModel : ViewModel() {
     fun initDatabase(context: Context) {
         try {
             Log.d("FFmpegViewModel", "开始初始化数据库")
+            this.appContext = context.applicationContext
             this.database = HistoryDatabase.getInstance(context)
             Log.d("FFmpegViewModel", "数据库实例获取成功")
             loadHistoryTasks()
         } catch (e: Exception) {
             Log.e("FFmpegViewModel", "数据库初始化失败", e)
             e.printStackTrace()
+        }
+    }
+
+    fun loadHistory() {
+        viewModelScope.launch {
+            try {
+                Log.d("FFmpegViewModel", "手动刷新历史记录")
+                database?.historyDao()?.getAllHistories()?.collect { histories ->
+                    Log.d("FFmpegViewModel", "刷新获取到 ${histories.size} 条历史记录")
+                    historyTasks.clear()
+                    historyTasks.addAll(histories.map { it.toConversionTask() })
+                }
+            } catch (e: Exception) {
+                Log.e("FFmpegViewModel", "刷新历史记录失败", e)
+                e.printStackTrace()
+            }
         }
     }
 
@@ -139,9 +170,7 @@ class FFmpegViewModel : ViewModel() {
                 database?.historyDao()?.getAllHistories()?.collect { histories ->
                     Log.d("FFmpegViewModel", "获取到 ${histories.size} 条历史记录")
                     historyTasks.clear()
-                    historyTasks.addAll(histories.map {
-                        it.toConversionTask()
-                    })
+                    historyTasks.addAll(histories.map { it.toConversionTask() })
                 }
             } catch (e: Exception) {
                 Log.e("FFmpegViewModel", "加载历史记录失败", e)
@@ -201,7 +230,7 @@ class FFmpegViewModel : ViewModel() {
                 if (totalDurationMs > 0) {
                     progress = (currentTimeMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 0.99f)
                 }
-            } catch ( _ : NumberFormatException) {
+            } catch (_: NumberFormatException) {
                 // 忽略
             }
         }
@@ -215,7 +244,7 @@ class FFmpegViewModel : ViewModel() {
                 if (estimatedTotalFrames > 0 && frameNumber > 0) {
                     progress = (frameNumber.toFloat() / estimatedTotalFrames.toFloat()).coerceIn(0f, 0.99f)
                 }
-            } catch ( _ : NumberFormatException) {
+            } catch (_: NumberFormatException) {
                 // 忽略
             }
         }
@@ -261,6 +290,86 @@ class FFmpegViewModel : ViewModel() {
             }
         }
     }
+
+    // ============================================================
+    // 文件操作方法（使用 FileUtils 兼容函数）
+    // ============================================================
+
+    private fun getContext(): Context? = appContext
+
+    // ============================================================
+    // 公开的文件操作方法（使用统一的 FileUtils 工具）
+    // ============================================================
+
+    fun clearHistoryItem(task: ConversionTask) {
+        try {
+            val context = getContext()
+            if (context != null) {
+                val deleted = deleteFileCompat(context, task.outputPath)
+                Log.d("FFmpegViewModel", "删除文件: ${task.outputPath}, 结果: $deleted")
+            } else {
+                Log.e("FFmpegViewModel", "Context 为空，无法删除文件")
+            }
+
+            viewModelScope.launch {
+                try {
+                    database?.historyDao()?.delete(task.toHistory())
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+
+            historyTasks.remove(task)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun clearAllHistory() {
+        val context = getContext()
+        if (context != null) {
+            historyTasks.forEach { task ->
+                try {
+                    deleteFileCompat(context, task.outputPath)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        } else {
+            Log.e("FFmpegViewModel", "Context 为空，无法删除文件")
+        }
+
+        viewModelScope.launch {
+            try {
+                database?.historyDao()?.deleteAll()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        historyTasks.clear()
+    }
+
+    fun clearCompletedOutputFiles() {
+        val context = getContext()
+        if (context != null) {
+            historyTasks.forEach { task ->
+                if (task.status == "完成") {
+                    try {
+                        deleteFileCompat(context, task.outputPath)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+        } else {
+            Log.e("FFmpegViewModel", "Context 为空，无法删除文件")
+        }
+    }
+
+    // ============================================================
+    // 原有方法
+    // ============================================================
 
     fun extractAudio(
         inputPath: String,
@@ -318,10 +427,12 @@ class FFmpegViewModel : ViewModel() {
                     commandList.add("-compression_level")
                     commandList.add("10")
                     when {
-                        bitrate.endsWith("k") && bitrate.substring(0, bitrate.length-1).toIntOrNull()?.let { it <= 96 } == true -> {
+                        bitrate.endsWith("k") && bitrate.substring(0, bitrate.length - 1).toIntOrNull()
+                            ?.let { it <= 96 } == true -> {
                             commandList.add("-application")
                             commandList.add("lowdelay")
                         }
+
                         else -> {
                             commandList.add("-application")
                             commandList.add("audio")
@@ -438,6 +549,200 @@ class FFmpegViewModel : ViewModel() {
             command = command,
             taskId = UUID.randomUUID().toString(),
             type = "视频转换 - ${format.uppercase(Locale.getDefault())}",
+            inputPath = inputPath,
+            outputPath = outputPath,
+            onComplete = onComplete
+        )
+    }
+
+    fun convertImage(
+        inputPath: String,
+        outputPath: String,
+        format: String,
+        quality: Int = 90,
+        width: Int = 0,
+        height: Int = 0,
+        maintainAspectRatio: Boolean = true,
+        compressionLevel: Int = 6,
+        dither: Boolean = true,
+        colors: Int = 256,
+        lossless: Boolean = false,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        val command = buildString {
+            append("-i \"$inputPath\" -y")
+
+            if (width > 0 || height > 0) {
+                append(" -vf ")
+                when {
+                    width > 0 && height > 0 -> {
+                        if (maintainAspectRatio) {
+                            append("\"scale='if(gt(a,$width/$height),$width,-2)':'if(gt(a,$width/$height),-2,$height)'\"")
+                        } else {
+                            append("\"scale=$width:$height\"")
+                        }
+                    }
+
+                    width > 0 -> append("\"scale=$width:-2\"")
+                    else -> append("\"scale=-2:$height\"")
+                }
+            }
+
+            when (format.lowercase(Locale.getDefault())) {
+                "jpg", "jpeg" -> {
+                    val jpegQuality = ((100 - quality) / 2).coerceIn(2, 31)
+                    append(" -q:v $jpegQuality")
+                    append(" -huffman optimal")
+                }
+
+                "png" -> {
+                    val pngCompression = compressionLevel.coerceIn(0, 9)
+                    append(" -compression_level $pngCompression")
+                    append(" -pred mixed")
+                }
+
+                "webp" -> {
+                    if (lossless) {
+                        append(" -lossless 1 -quality $quality")
+                        append(" -method 6")
+                    } else {
+                        append(" -quality $quality")
+                        append(" -sharp_yuv 1")
+                    }
+                }
+
+                "bmp" -> {
+                    append(" -pix_fmt bgr24")
+                }
+
+                "gif" -> {
+                    val paletteGenCmd = if (dither) {
+                        "palettegen=stats_mode=single"
+                    } else {
+                        "palettegen=stats_mode=single:max_colors=$colors"
+                    }
+
+                    val filterComplex = if (width > 0 || height > 0) {
+                        val scale = when {
+                            width > 0 && height > 0 -> "scale=$width:$height"
+                            width > 0 -> "scale=$width:-2"
+                            height > 0 -> "scale=-2:$height"
+                            else -> "scale=iw:ih"
+                        }
+                        "\"${scale}[s];[s]${paletteGenCmd}[p];[s][p]paletteuse${if (dither) "" else "=dither=none"}\""
+                    } else {
+                        "\"[0:v]${paletteGenCmd}[p];[0:v][p]paletteuse${if (dither) "" else "=dither=none"}\""
+                    }
+
+                    append(" -filter_complex $filterComplex")
+                    append(" -map \"[out]\"")
+                }
+
+                "tiff" -> {
+                    append(" -compression_algo lzw")
+                    append(" -pix_fmt rgb24")
+                }
+
+                "ico" -> {
+                    if (width == 0 || height == 0) {
+                        append(" -vf \"scale=16:16,scale=32:32,scale=48:48,scale=64:64,scale=128:128,scale=256:256\"")
+                    }
+                }
+
+                "heif", "heic" -> {
+                    append(" -c:v libheif")
+                    append(" -quality $quality")
+                    if (lossless) {
+                        append(" -lossless 1")
+                    }
+                }
+
+                "avif" -> {
+                    append(" -c:v libaom-av1")
+                    append(" -crf ${63 - (quality * 63 / 100)}")
+                    append(" -b:v 0")
+                    append(" -strict experimental")
+                }
+
+                "jp2", "j2k" -> {
+                    append(" -c:v jpeg2000")
+                    append(" -quality $quality")
+                    if (lossless) {
+                        append(" -pred 1")
+                    }
+                }
+
+                "pdf" -> {
+                    append(" -c:v pdf")
+                    append(" -pix_fmt rgb24")
+                }
+
+                "psd" -> {
+                    append(" -c:v psd")
+                    append(" -pix_fmt rgba")
+                }
+
+                "tga" -> {
+                    append(" -c:v targa")
+                    append(" -pix_fmt bgra")
+                }
+            }
+
+            append(" \"$outputPath\"")
+        }
+
+        executeFFmpegCommand(
+            command = command,
+            taskId = UUID.randomUUID().toString(),
+            type = "图片转换 - ${format.uppercase(Locale.getDefault())}",
+            inputPath = inputPath,
+            outputPath = outputPath,
+            onComplete = onComplete
+        )
+    }
+
+    fun convertVideoToGif(
+        inputPath: String,
+        outputPath: String,
+        fps: Int,
+        scale: Int,
+        quality: Int,
+        loopCount: Int,
+        colors: Int,
+        startTime: String?,
+        duration: String?,
+        useDither: Boolean,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        val command = buildString {
+            append("-i \"$inputPath\" -y")
+
+            if (!startTime.isNullOrBlank()) {
+                append(" -ss $startTime")
+            }
+            if (!duration.isNullOrBlank()) {
+                append(" -t $duration")
+            }
+
+            val filterComplex = if (useDither) {
+                "fps=$fps,scale=$scale:-1:flags=lanczos,split[split1][split2];[split1]palettegen[pal];[split2][pal]paletteuse=dither=sierra2_4a"
+            } else {
+                "fps=$fps,scale=$scale:-1:flags=lanczos,split[split1][split2];[split1]palettegen=max_colors=$colors[pal];[split2][pal]paletteuse=dither=none"
+            }
+
+            append(" -filter_complex \"$filterComplex\"")
+
+            if (loopCount >= 0) {
+                append(" -loop $loopCount")
+            }
+
+            append(" \"$outputPath\"")
+        }
+
+        executeFFmpegCommand(
+            command = command,
+            taskId = UUID.randomUUID().toString(),
+            type = "视频转GIF",
             inputPath = inputPath,
             outputPath = outputPath,
             onComplete = onComplete
@@ -602,256 +907,10 @@ class FFmpegViewModel : ViewModel() {
         }
     }
 
-    fun clearAllHistory() {
-        historyTasks.forEach { task ->
-            try {
-                val outputFile = File(task.outputPath)
-                if (outputFile.exists()) {
-                    outputFile.delete()
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-
-        viewModelScope.launch {
-            try {
-                database?.historyDao()?.deleteAll()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-
-        historyTasks.clear()
-    }
-
-    fun clearHistoryItem(task: ConversionTask) {
-        try {
-            val outputFile = File(task.outputPath)
-            if (outputFile.exists()) {
-                outputFile.delete()
-            }
-
-            viewModelScope.launch {
-                try {
-                    database?.historyDao()?.delete(task.toHistory())
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-
-            historyTasks.remove(task)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    fun clearCompletedOutputFiles() {
-        historyTasks.forEach { task ->
-            if (task.status == "完成") {
-                try {
-                    val outputFile = File(task.outputPath)
-                    if (outputFile.exists()) {
-                        outputFile.delete()
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        cancelCurrentProcessing()
-        com.arthenica.ffmpegkit.FFmpegKitConfig.enableStatisticsCallback(null)
-        com.arthenica.ffmpegkit.FFmpegKitConfig.enableLogCallback(null)
-    }
-
-    fun convertImage(
-        inputPath: String,
-        outputPath: String,
-        format: String,
-        quality: Int = 90,
-        width: Int = 0,
-        height: Int = 0,
-        maintainAspectRatio: Boolean = true,
-        compressionLevel: Int = 6,
-        dither: Boolean = true,
-        colors: Int = 256,
-        lossless: Boolean = false,
-        onComplete: (Boolean, String) -> Unit
-    ) {
-        val command = buildString {
-            append("-i \"$inputPath\" -y")
-
-            if (width > 0 || height > 0) {
-                append(" -vf ")
-                when {
-                    width > 0 && height > 0 -> {
-                        if (maintainAspectRatio) {
-                            append("\"scale='if(gt(a,$width/$height),$width,-2)':'if(gt(a,$width/$height),-2,$height)'\"")
-                        } else {
-                            append("\"scale=$width:$height\"")
-                        }
-                    }
-                    width > 0 -> append("\"scale=$width:-2\"")
-                    else -> append("\"scale=-2:$height\"")
-                }
-            }
-
-            when (format.lowercase(Locale.getDefault())) {
-                "jpg", "jpeg" -> {
-                    val jpegQuality = ((100 - quality) / 2).coerceIn(2, 31)
-                    append(" -q:v $jpegQuality")
-                    append(" -huffman optimal")
-                }
-                "png" -> {
-                    val pngCompression = compressionLevel.coerceIn(0, 9)
-                    append(" -compression_level $pngCompression")
-                    append(" -pred mixed")
-                }
-                "webp" -> {
-                    if (lossless) {
-                        append(" -lossless 1 -quality $quality")
-                        append(" -method 6")
-                    } else {
-                        append(" -quality $quality")
-                        append(" -sharp_yuv 1")
-                    }
-                }
-                "bmp" -> {
-                    append(" -pix_fmt bgr24")
-                }
-                "gif" -> {
-                    val paletteGenCmd = if (dither) {
-                        "palettegen=stats_mode=single"
-                    } else {
-                        "palettegen=stats_mode=single:max_colors=$colors"
-                    }
-
-                    val filterComplex = if (width > 0 || height > 0) {
-                        val scale = when {
-                            width > 0 && height > 0 -> "scale=$width:$height"
-                            width > 0 -> "scale=$width:-2"
-                            height > 0 -> "scale=-2:$height"
-                            else -> "scale=iw:ih"
-                        }
-                        "\"${scale}[s];[s]${paletteGenCmd}[p];[s][p]paletteuse${if (dither) "" else "=dither=none"}\""
-                    } else {
-                        "\"[0:v]${paletteGenCmd}[p];[0:v][p]paletteuse${if (dither) "" else "=dither=none"}\""
-                    }
-
-                    append(" -filter_complex $filterComplex")
-                    append(" -map \"[out]\"")
-                }
-                "tiff" -> {
-                    append(" -compression_algo lzw")
-                    append(" -pix_fmt rgb24")
-                }
-                "ico" -> {
-                    if (width == 0 || height == 0) {
-                        append(" -vf \"scale=16:16,scale=32:32,scale=48:48,scale=64:64,scale=128:128,scale=256:256\"")
-                    }
-                }
-                "heif", "heic" -> {
-                    append(" -c:v libheif")
-                    append(" -quality $quality")
-                    if (lossless) {
-                        append(" -lossless 1")
-                    }
-                }
-                "avif" -> {
-                    append(" -c:v libaom-av1")
-                    append(" -crf ${63 - (quality * 63 / 100)}")
-                    append(" -b:v 0")
-                    append(" -strict experimental")
-                }
-                "jp2", "j2k" -> {
-                    append(" -c:v jpeg2000")
-                    append(" -quality $quality")
-                    if (lossless) {
-                        append(" -pred 1")
-                    }
-                }
-                "pdf" -> {
-                    append(" -c:v pdf")
-                    append(" -pix_fmt rgb24")
-                }
-                "psd" -> {
-                    append(" -c:v psd")
-                    append(" -pix_fmt rgba")
-                }
-                "tga" -> {
-                    append(" -c:v targa")
-                    append(" -pix_fmt bgra")
-                }
-            }
-
-            append(" \"$outputPath\"")
-        }
-
-        executeFFmpegCommand(
-            command = command,
-            taskId = UUID.randomUUID().toString(),
-            type = "图片转换 - ${format.uppercase(Locale.getDefault())}",
-            inputPath = inputPath,
-            outputPath = outputPath,
-            onComplete = onComplete
-        )
-    }
-
-    fun convertVideoToGif(
-        inputPath: String,
-        outputPath: String,
-        fps: Int,
-        scale: Int,
-        quality: Int,
-        loopCount: Int,
-        colors: Int,
-        startTime: String?,
-        duration: String?,
-        useDither: Boolean,
-        onComplete: (Boolean, String) -> Unit
-    ) {
-        val command = buildString {
-            append("-i \"$inputPath\" -y")
-
-            if (!startTime.isNullOrBlank()) {
-                append(" -ss $startTime")
-            }
-            if (!duration.isNullOrBlank()) {
-                append(" -t $duration")
-            }
-
-            val filterComplex = if (useDither) {
-                "fps=$fps,scale=$scale:-1:flags=lanczos,split[split1][split2];[split1]palettegen[pal];[split2][pal]paletteuse=dither=sierra2_4a"
-            } else {
-                "fps=$fps,scale=$scale:-1:flags=lanczos,split[split1][split2];[split1]palettegen=max_colors=$colors[pal];[split2][pal]paletteuse=dither=none"
-            }
-
-            append(" -filter_complex \"$filterComplex\"")
-
-            if (loopCount >= 0) {
-                append(" -loop $loopCount")
-            }
-
-            append(" \"$outputPath\"")
-        }
-
-        executeFFmpegCommand(
-            command = command,
-            taskId = UUID.randomUUID().toString(),
-            type = "视频转GIF",
-            inputPath = inputPath,
-            outputPath = outputPath,
-            onComplete = onComplete
-        )
-    }
-
     // ============================================================
-    // 🔧 核心修复：executeCommand 方法 - 使用 executeAsync
+    // 执行命令相关方法
     // ============================================================
+
     fun executeCommandWithCallback(
         command: String,
         onComplete: (Boolean, String) -> Unit
@@ -861,7 +920,6 @@ class FFmpegViewModel : ViewModel() {
             _executionResult.value = "正在执行命令: $command\n\n"
 
             try {
-                // 创建日志回调来实现实时输出
                 val logCallback = LogCallback { log ->
                     viewModelScope.launch(Dispatchers.Main) {
                         val message = log.message ?: ""
@@ -901,7 +959,6 @@ class FFmpegViewModel : ViewModel() {
         }
     }
 
-    // 带回调的结果处理
     private fun handleSessionResultWithCallback(session: FFmpegSession): Boolean {
         val returnCode = session.returnCode
         val output = StringBuilder()
@@ -912,9 +969,11 @@ class FFmpegViewModel : ViewModel() {
                 output.append("\n✅ 命令执行成功\n")
                 isSuccess = true
             }
+
             ReturnCode.isCancel(returnCode) -> {
                 output.append("\n⚠️ 命令已被取消\n")
             }
+
             else -> {
                 output.append("\n❌ 命令执行失败\n")
             }
@@ -946,5 +1005,12 @@ class FFmpegViewModel : ViewModel() {
     fun cancelExecution() {
         currentSession?.cancel()
         _isExecuting.value = false
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        cancelCurrentProcessing()
+        com.arthenica.ffmpegkit.FFmpegKitConfig.enableStatisticsCallback(null)
+        com.arthenica.ffmpegkit.FFmpegKitConfig.enableLogCallback(null)
     }
 }

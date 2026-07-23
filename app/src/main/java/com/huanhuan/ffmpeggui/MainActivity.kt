@@ -1,4 +1,3 @@
-// MainActivity.kt
 package com.huanhuan.ffmpeggui
 
 import android.net.Uri
@@ -8,7 +7,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -64,6 +62,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.huanhuan.ffmpeggui.ui.theme.FFmpegGuiTheme
+import java.net.URLDecoder
+import java.net.URLEncoder
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -154,7 +154,6 @@ fun FFmpegApp() {
                     // 教程页面显示展开/折叠全部按钮
                     if (currentRoute == "tutorial") {
                         // 这个按钮由 TutorialScreen 自己控制，这里不添加
-                        // 或者可以添加一个搜索按钮
                     }
                     // 主页面的关于按钮
                     if (currentRoute in listOf("history", "video", "audio", "image", "advanced")) {
@@ -232,7 +231,7 @@ fun FFmpegApp() {
             }
         }
     ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
+        androidx.compose.foundation.layout.Box(modifier = Modifier.padding(paddingValues)) {
             NavHost(
                 navController = navController,
                 startDestination = "history"
@@ -242,8 +241,16 @@ fun FFmpegApp() {
                     HistoryScreen(
                         onBack = { navController.popBackStack() },
                         onNavigateToResult = { outputPath ->
-                            val encodedPath = Uri.encode(outputPath, "/")
-                            navController.navigate("result/$encodedPath")
+                            try {
+                                // 使用 URLEncoder 编码路径，确保特殊字符被正确处理
+                                val encodedPath = URLEncoder.encode(outputPath, "UTF-8")
+                                navController.navigate("result/$encodedPath")
+                            } catch (e: Exception) {
+                                Log.e("MainActivity", "编码路径失败: ${e.message}")
+                                // 如果编码失败，使用 Uri.encode 作为备选
+                                val encodedPath = Uri.encode(outputPath)
+                                navController.navigate("result/$encodedPath")
+                            }
                         },
                         viewModel = viewModel
                     )
@@ -338,17 +345,28 @@ fun FFmpegApp() {
                     FFmpegTutorialScreen(
                         navController = navController,
                         onBack = { navController.popBackStack() },
-                        // 传入控制展开/折叠的回调
                         onToggleAll = { /* 由 TutorialScreen 内部管理 */ }
                     )
                 }
 
-                // 结果界面
+                // 结果界面 - 接收编码后的路径并解码
                 composable(
                     "result/{outputPath}",
                     arguments = listOf(navArgument("outputPath") { type = NavType.StringType })
                 ) { backStackEntry ->
-                    val outputPath = backStackEntry.arguments?.getString("outputPath") ?: ""
+                    val encodedPath = backStackEntry.arguments?.getString("outputPath") ?: ""
+                    // 解码路径
+                    val outputPath = try {
+                        URLDecoder.decode(encodedPath, "UTF-8")
+                    } catch (e: Exception) {
+                        // 如果 URLDecoder 失败，尝试使用 Uri.decode
+                        try {
+                            Uri.decode(encodedPath)
+                        } catch (e2: Exception) {
+                            Log.e("MainActivity", "解码路径失败: ${e2.message}")
+                            encodedPath // 如果都失败，使用原值
+                        }
+                    }
                     ResultScreen(
                         outputPath = outputPath,
                         onBack = { navController.popBackStack() },
@@ -434,7 +452,7 @@ fun ImageMainScreen(
     )
 }
 
-// 通用的功能列表界面 - 移除 title 参数
+// 通用的功能列表界面
 @Composable
 fun FeatureListScreen(
     features: List<Any>,
@@ -445,8 +463,6 @@ fun FeatureListScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // 移除标题显示，由统一顶栏负责
-
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {

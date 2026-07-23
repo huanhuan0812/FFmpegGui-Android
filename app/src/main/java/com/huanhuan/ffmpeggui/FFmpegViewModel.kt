@@ -1062,7 +1062,7 @@ class FFmpegViewModel : ViewModel() {
                 }
 
                 // 检查是否有视频流
-                val hasVideo = streams?.any { it.type == "video" } == true
+                val hasVideo = streams.any { it.type == "video" }
 
                 // 解析时长
                 val durationStr = mediaInformation.duration ?: "0"
@@ -1195,7 +1195,7 @@ class FFmpegViewModel : ViewModel() {
                     codec = codec,
                     codecLongName = finalCodecLongName,
                     bitDepth = bitDepth,
-                    streamCount = streams?.size ?: 0,
+                    streamCount = streams.size ?: 0,
                     isVideoPresent = hasVideo,
                     formatName = formatName
                 )
@@ -1353,7 +1353,7 @@ class FFmpegViewModel : ViewModel() {
 
 
                 // 检测 HDR（基于色彩空间和色深）
-                val hdr = colorSpace?.let {
+                val hdr = colorSpace.let {
                     it.contains("2020", ignoreCase = true) ||
                             it.contains("2100", ignoreCase = true) ||
                             it.contains("st2084", ignoreCase = true) ||

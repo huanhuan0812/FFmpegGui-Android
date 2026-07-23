@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.HdrOn
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Warning
@@ -35,7 +34,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard

@@ -1,5 +1,6 @@
 package com.huanhuan.ffmpeggui
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -56,6 +57,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@SuppressLint("SuspiciousIndentation")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(

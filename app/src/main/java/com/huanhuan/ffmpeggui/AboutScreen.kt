@@ -36,9 +36,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -391,7 +389,7 @@ fun AboutScreen(
                                             "https://github.com/huanhuan0812/FFmpegGui-Android".toUri()
                                         )
                                         context.startActivity(intent)
-                                    } catch (e: Exception) {
+                                    } catch ( _ : Exception) {
                                         Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
                                     }
                                 }
@@ -421,7 +419,7 @@ fun AboutScreen(
                                             "qdhuanhuan08@outlook.com".toUri()
                                         )
                                         context.startActivity(intent)
-                                    } catch (e: Exception) {
+                                    } catch ( _ : Exception) {
                                         Toast.makeText(context, "无法打开邮件客户端", Toast.LENGTH_SHORT).show()
                                     }
                                 }
@@ -451,7 +449,7 @@ fun AboutScreen(
                                             "https://huanhuan0812.github.io/".toUri()
                                         )
                                         context.startActivity(intent)
-                                    } catch (e: Exception) {
+                                    } catch ( _ : Exception) {
                                         Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
                                     }
                                 }

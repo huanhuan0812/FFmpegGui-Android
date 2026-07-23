@@ -46,6 +46,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun HistoryScreen(
@@ -64,7 +65,7 @@ fun HistoryScreen(
     LaunchedEffect(Unit) {
         viewModel.processingEvents.collectLatest { event ->
             // 当有事件发生时，延迟一点刷新历史列表
-            delay(500)
+            delay(500.milliseconds)
             viewModel.loadHistory()
         }
     }

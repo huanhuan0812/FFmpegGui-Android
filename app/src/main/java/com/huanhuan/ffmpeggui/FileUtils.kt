@@ -3,71 +3,45 @@ package com.huanhuan.ffmpeggui
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
+import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.util.Log
+import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import java.io.File
 import java.io.FileOutputStream
-import androidx.core.net.toUri
 
 private const val TAG = "FileUtils"
 
+/**
+ * 从 Uri 获取文件路径，优先返回真实路径，避免不必要的缓存复制
+ *
+ * @return 文件路径，如果无法获取则返回 null
+ */
 fun getPathFromUri(context: Context, uri: Uri): String? {
     return when (uri.scheme) {
         ContentResolver.SCHEME_CONTENT -> {
-            try {
-                // 获取文件名
-                val fileName = getFileName(context, uri) ?: "temp_${System.currentTimeMillis()}.tmp"
-                Log.d(TAG, "原始文件名: $fileName")
-
-                // 确保文件名有扩展名
-                val finalFileName = ensureFileExtension(context, uri, fileName)
-                Log.d(TAG, "最终文件名: $finalFileName")
-
-                // 创建缓存文件
-                val cacheFile = File(context.cacheDir, finalFileName)
-                Log.d(TAG, "缓存文件路径: ${cacheFile.absolutePath}")
-
-                // 如果文件已存在，删除旧文件
-                if (cacheFile.exists()) {
-                    Log.d(TAG, "删除已存在的缓存文件: ${cacheFile.delete()}")
-                }
-
-                // 复制文件
-                context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    Log.d(TAG, "开始复制文件，输入流可用: ${inputStream.available()}")
-
-                    FileOutputStream(cacheFile).use { outputStream ->
-                        val buffer = ByteArray(8192)
-                        var length: Int
-                        var totalBytes = 0L
-                        while (inputStream.read(buffer).also { length = it } > 0) {
-                            outputStream.write(buffer, 0, length)
-                            totalBytes += length
-                        }
-                        Log.d(TAG, "文件复制完成，总大小: $totalBytes bytes")
-                    }
-                } ?: run {
-                    Log.e(TAG, "无法打开输入流，uri: $uri")
-                    return null
-                }
-
-                // 验证文件是否成功创建
-                if (cacheFile.exists() && cacheFile.length() > 0) {
-                    Log.d(TAG, "✅ 缓存文件创建成功: ${cacheFile.absolutePath}, 大小: ${cacheFile.length()} bytes")
-                    return cacheFile.absolutePath
-                } else {
-                    Log.e(TAG, "❌ 缓存文件创建失败或为空")
-                    return null
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "复制文件到缓存失败", e)
-                return null
+            // 优先尝试获取真实路径
+            val realPath = getRealPathFromContentUri(context, uri)
+            if (realPath != null) {
+                Log.d(TAG, "✅ 获取到真实路径: $realPath")
+                return realPath
             }
+
+            // 如果无法获取真实路径，且文件来自 MediaStore，尝试直接通过 ID 访问
+            val mediaPath = getPathFromMediaStore(context, uri)
+            if (mediaPath != null) {
+                Log.d(TAG, "✅ 从 MediaStore 获取路径: $mediaPath")
+                return mediaPath
+            }
+
+            // 最后才回退到缓存复制
+            Log.d(TAG, "⚠️ 无法获取真实路径，回退到缓存复制")
+            copyToCache(context, uri)
         }
         ContentResolver.SCHEME_FILE -> {
             uri.path
@@ -79,16 +53,195 @@ fun getPathFromUri(context: Context, uri: Uri): String? {
     }
 }
 
+/**
+ * 从 Content URI 获取真实文件路径（适用于 MediaStore 中的文件）
+ */
+private fun getRealPathFromContentUri(context: Context, uri: Uri): String? {
+    // 检查是否是 MediaStore 的 URI
+    val isMediaStoreUri = uri.toString().startsWith(MediaStore.Images.Media.EXTERNAL_CONTENT_URI.toString()) ||
+            uri.toString().startsWith(MediaStore.Video.Media.EXTERNAL_CONTENT_URI.toString()) ||
+            uri.toString().startsWith(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI.toString()) ||
+            uri.toString().startsWith(MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL).toString())
+
+    if (!isMediaStoreUri) {
+        return null
+    }
+
+    return try {
+        // 方法1：通过 DATA 字段获取（已废弃但仍有兼容性）
+        val projection = arrayOf(MediaStore.MediaColumns.DATA)
+        context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+            val dataIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
+            if (cursor.moveToFirst()) {
+                val path = cursor.getString(dataIndex)
+                if (path != null && File(path).exists()) {
+                    return path
+                }
+            }
+        }
+
+        // 方法2：通过 ID 和外部存储路径组合
+        val id = ContentUris.parseId(uri)
+        if (id > 0) {
+            val filePath = getFilePathFromId(context, uri, id)
+            if (filePath != null && File(filePath).exists()) {
+                return filePath
+            }
+        }
+
+        null
+    } catch (e: Exception) {
+        Log.d(TAG, "获取真实路径失败: ${e.message}")
+        null
+    }
+}
+
+/**
+ * 通过 MediaStore ID 获取文件路径
+ */
+private fun getFilePathFromId(context: Context, uri: Uri, id: Long): String? {
+    val collection = when {
+        uri.toString().contains(MediaStore.Images.Media.EXTERNAL_CONTENT_URI.toString()) -> {
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        }
+        uri.toString().contains(MediaStore.Video.Media.EXTERNAL_CONTENT_URI.toString()) -> {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        }
+        uri.toString().contains(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI.toString()) -> {
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        }
+        else -> {
+            MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        }
+    }
+
+    val queryUri = ContentUris.withAppendedId(collection, id)
+    val projection = arrayOf(MediaStore.MediaColumns.DATA)
+
+    context.contentResolver.query(queryUri, projection, null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) {
+            val dataIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
+            return cursor.getString(dataIndex)
+        }
+    }
+
+    return null
+}
+
+/**
+ * 从 MediaStore 获取文件路径（通用方法）
+ */
+private fun getPathFromMediaStore(context: Context, uri: Uri): String? {
+    // 尝试通过 ID 查询
+    try {
+        val id = ContentUris.parseId(uri)
+        if (id > 0) {
+            val filePath = getFilePathFromId(context, uri, id)
+            if (filePath != null && File(filePath).exists()) {
+                return filePath
+            }
+        }
+    } catch (e: Exception) {
+        // parseId 可能失败，继续其他方法
+    }
+
+    // 尝试通过文件名和大小匹配
+    val fileName = getFileName(context, uri)
+    val fileSize = getFileSizeFromUri(context, uri)
+
+    if (fileName != null && fileSize > 0) {
+        val path = findFileByAttributes(context, fileName, fileSize)
+        if (path != null) {
+            return path
+        }
+    }
+
+    return null
+}
+
+/**
+ * 通过文件名和大小在 MediaStore 中查找文件
+ */
+private fun findFileByAttributes(context: Context, fileName: String, fileSize: Long): String? {
+    val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
+    val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${MediaStore.MediaColumns.SIZE} = ?"
+    val selectionArgs = arrayOf(fileName, fileSize.toString())
+    val projection = arrayOf(MediaStore.MediaColumns.DATA)
+
+    context.contentResolver.query(collection, projection, selection, selectionArgs, null)?.use { cursor ->
+        if (cursor.moveToFirst()) {
+            val dataIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
+            val path = cursor.getString(dataIndex)
+            if (path != null && File(path).exists()) {
+                return path
+            }
+        }
+    }
+
+    return null
+}
+
+/**
+ * 获取文件大小（通过 ContentResolver）
+ */
+private fun getFileSizeFromUri(context: Context, uri: Uri): Long {
+    return try {
+        context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+            pfd.statSize
+        } ?: -1
+    } catch (e: Exception) {
+        -1
+    }
+}
+
+/**
+ * 复制到缓存目录（作为最后的回退方案）
+ */
+private fun copyToCache(context: Context, uri: Uri): String? {
+    return try {
+        val fileName = getFileName(context, uri) ?: "temp_${System.currentTimeMillis()}.tmp"
+        val finalFileName = ensureFileExtension(context, uri, fileName)
+        val cacheFile = File(context.cacheDir, finalFileName)
+
+        // 删除已存在的旧文件
+        if (cacheFile.exists()) {
+            cacheFile.delete()
+        }
+
+        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+            FileOutputStream(cacheFile).use { outputStream ->
+                val buffer = ByteArray(8192)
+                var length: Int
+                while (inputStream.read(buffer).also { length = it } > 0) {
+                    outputStream.write(buffer, 0, length)
+                }
+            }
+        } ?: return null
+
+        if (cacheFile.exists() && cacheFile.length() > 0) {
+            Log.d(TAG, "✅ 缓存文件创建成功: ${cacheFile.absolutePath}, 大小: ${cacheFile.length()} bytes")
+            return cacheFile.absolutePath
+        } else {
+            null
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "复制文件到缓存失败", e)
+        null
+    }
+}
+
+/**
+ * 获取文件名
+ */
 fun getFileName(context: Context, uri: Uri): String? {
     var name: String? = null
 
     if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
-        val cursor = context.contentResolver.query(uri, null, null, null, null)
-        cursor?.use {
-            if (it.moveToFirst()) {
-                val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if (nameIndex != -1) {
-                    name = it.getString(nameIndex)
+                    name = cursor.getString(nameIndex)
                 }
             }
         }
@@ -98,7 +251,7 @@ fun getFileName(context: Context, uri: Uri): String? {
         name = uri.path
         val cut = name?.lastIndexOf('/')
         if (cut != -1 && cut != null) {
-            name = name.substring(cut + 1)
+            name = name?.substring(cut + 1)
         }
     }
 
@@ -106,127 +259,72 @@ fun getFileName(context: Context, uri: Uri): String? {
     return name
 }
 
-// 确保文件有正确的扩展名
+/**
+ * 确保文件有正确的扩展名
+ */
 private fun ensureFileExtension(context: Context, uri: Uri, fileName: String): String {
-    // 如果文件名已经有扩展名，直接返回
     if (fileName.contains('.')) {
         return fileName
     }
 
-    // 尝试从 MIME 类型获取扩展名
     val mimeType = context.contentResolver.getType(uri)
     Log.d(TAG, "MIME类型: $mimeType")
 
     if (mimeType != null) {
         val extension = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
-        Log.d(TAG, "从MIME获取的扩展名: $extension")
         if (extension != null) {
             return "$fileName.$extension"
         }
     }
 
-    // 根据 MIME 类型默认扩展名
-    when {
-        mimeType?.startsWith("video/") == true -> return "$fileName.mp4"
-        mimeType?.startsWith("audio/") == true -> return "$fileName.mp3"
-        mimeType?.startsWith("image/") == true -> return "$fileName.jpg"
-        else -> return "$fileName.mp4" // 默认使用 mp4
+    return when {
+        mimeType?.startsWith("video/") == true -> "$fileName.mp4"
+        mimeType?.startsWith("audio/") == true -> "$fileName.mp3"
+        mimeType?.startsWith("image/") == true -> "$fileName.jpg"
+        else -> "$fileName.mp4"
     }
 }
 
 // ============================================================
-// 新增：文件存在性检查和删除功能（兼容 Android 11+）
+// 文件存在性检查和删除功能（兼容 Android 11+）
 // ============================================================
 
 /**
- * 检查文件是否存在（兼容 Android 11+ Scoped Storage）
- *
- * @param context Context
- * @param filePath 文件路径
- * @return 文件是否存在
+ * 检查文件是否存在
  */
 fun fileExistsCompat(context: Context, filePath: String): Boolean {
-    if (filePath.isEmpty()) {
-        return false
-    }
+    if (filePath.isEmpty()) return false
 
     return try {
-        // 方法1：尝试直接访问（适用于 Android 10 及以下，或应用私有目录）
         val file = File(filePath)
-        if (file.exists()) {
-            Log.d(TAG, "✅ 文件存在 (直接访问): $filePath")
+        if (file.exists()) return true
+
+        if (filePath.startsWith("content://")) {
+            val uri = filePath.toUri()
+            context.contentResolver.openInputStream(uri)?.use { it.close() }
             return true
         }
 
-        // 方法2：如果是 content:// URI，尝试通过 ContentResolver 访问
-        if (filePath.startsWith("content://")) {
-            val uri = filePath.toUri()
-            try {
-                context.contentResolver.openInputStream(uri)?.use {
-                    it.close()
-                    Log.d(TAG, "✅ 文件存在 (ContentResolver): $filePath")
-                    return true
-                }
-            } catch (e: Exception) {
-                Log.d(TAG, "ContentResolver 访问失败: ${e.message}")
-            }
-        }
-
-        // 方法3：尝试通过 MediaStore 查询
         val uriFromPath = getFileUriFromPath(context, filePath)
         if (uriFromPath != null) {
-            try {
-                context.contentResolver.openInputStream(uriFromPath)?.use {
-                    it.close()
-                    Log.d(TAG, "✅ 文件存在 (MediaStore): $filePath")
-                    return true
-                }
-            } catch (e: Exception) {
-                Log.d(TAG, "MediaStore 访问失败: ${e.message}")
-            }
+            context.contentResolver.openInputStream(uriFromPath)?.use { it.close() }
+            return true
         }
 
-        // 方法4：尝试通过 DocumentFile 访问（适用于 Android/data 目录）
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            try {
-                val docFile = DocumentFile.fromFile(file)
-                if (docFile.exists()) {
-                    Log.d(TAG, "✅ 文件存在 (DocumentFile): $filePath")
-                    return true
-                }
-            } catch (e: Exception) {
-                Log.d(TAG, "DocumentFile 访问失败: ${e.message}")
-            }
-        }
-
-        // 方法5：尝试读取文件长度（某些情况下可以绕过权限检查）
-        try {
-            if (file.length() > 0) {
-                Log.d(TAG, "✅ 文件存在 (文件长度检查): $filePath, 大小: ${file.length()}")
-                return true
-            }
-        } catch ( _ : Exception) {
-            // 忽略
-        }
-
-        Log.d(TAG, "❌ 文件不存在: $filePath")
         false
     } catch (e: Exception) {
-        Log.e(TAG, "检查文件存在性异常: $filePath", e)
+        Log.e(TAG, "检查文件存在性异常", e)
         false
     }
 }
 
 /**
- * 从文件路径获取 Uri（通过 MediaStore）
+ * 从文件路径获取 Uri
  */
 fun getFileUriFromPath(context: Context, filePath: String): Uri? {
-    if (filePath.isEmpty()) {
-        return null
-    }
+    if (filePath.isEmpty()) return null
 
     return try {
-        // 如果已经是 content URI
         if (filePath.startsWith("content://")) {
             return filePath.toUri()
         }
@@ -234,21 +332,38 @@ fun getFileUriFromPath(context: Context, filePath: String): Uri? {
         val file = File(filePath)
         val fileName = file.name
 
-        // 如果是外部存储文件
         if (filePath.startsWith(Environment.getExternalStorageDirectory().absolutePath)) {
-            // 查询 MediaStore
             val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
 
-            // 方法1：通过 DATA 字段查询（已废弃但仍有兼容性）
+            // 方法1：通过 DATA 字段查询
             val selection = "${MediaStore.MediaColumns.DATA} = ?"
             val selectionArgs = arrayOf(filePath)
 
-            try {
+            context.contentResolver.query(
+                collection,
+                arrayOf(MediaStore.MediaColumns._ID),
+                selection,
+                selectionArgs,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                    val id = cursor.getLong(idColumn)
+                    return ContentUris.withAppendedId(collection, id)
+                }
+            }
+
+            // 方法2：通过 RELATIVE_PATH 查询（Android 10+）
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val relativePath = file.absolutePath.substringAfter(Environment.getExternalStorageDirectory().absolutePath)
+                val selection2 = "${MediaStore.MediaColumns.RELATIVE_PATH} = ? AND ${MediaStore.MediaColumns.DISPLAY_NAME} = ?"
+                val selectionArgs2 = arrayOf(relativePath, fileName)
+
                 context.contentResolver.query(
                     collection,
                     arrayOf(MediaStore.MediaColumns._ID),
-                    selection,
-                    selectionArgs,
+                    selection2,
+                    selectionArgs2,
                     null
                 )?.use { cursor ->
                     if (cursor.moveToFirst()) {
@@ -257,140 +372,63 @@ fun getFileUriFromPath(context: Context, filePath: String): Uri? {
                         return ContentUris.withAppendedId(collection, id)
                     }
                 }
-            } catch (e: Exception) {
-                Log.d(TAG, "通过 DATA 字段查询失败: ${e.message}")
-            }
-
-            // 方法2：通过相对路径查询（Android 10+）
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                try {
-                    val relativePath = file.absolutePath.substringAfter(Environment.getExternalStorageDirectory().absolutePath)
-                    val selection2 = "${MediaStore.MediaColumns.RELATIVE_PATH} = ? AND ${MediaStore.MediaColumns.DISPLAY_NAME} = ?"
-                    val selectionArgs2 = arrayOf(relativePath, fileName)
-
-                    context.contentResolver.query(
-                        collection,
-                        arrayOf(MediaStore.MediaColumns._ID),
-                        selection2,
-                        selectionArgs2,
-                        null
-                    )?.use { cursor ->
-                        if (cursor.moveToFirst()) {
-                            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
-                            val id = cursor.getLong(idColumn)
-                            return ContentUris.withAppendedId(collection, id)
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.d(TAG, "通过 RELATIVE_PATH 查询失败: ${e.message}")
-                }
             }
         }
 
         null
     } catch (e: Exception) {
-        Log.e(TAG, "获取文件 Uri 失败: $filePath", e)
+        Log.e(TAG, "获取文件 Uri 失败", e)
         null
     }
 }
 
 /**
- * 删除文件（兼容 Android 11+ Scoped Storage）
- *
- * @param context Context
- * @param filePath 文件路径
- * @return 是否删除成功
+ * 删除文件
  */
 fun deleteFileCompat(context: Context, filePath: String): Boolean {
-    if (filePath.isEmpty()) {
-        return false
-    }
+    if (filePath.isEmpty()) return false
 
     Log.d(TAG, "尝试删除文件: $filePath")
 
     return try {
-        // 方法1：直接删除（适用于应用私有目录或 Android 10 以下）
         val file = File(filePath)
-        if (file.exists()) {
-            val deleted = file.delete()
-            if (deleted) {
-                Log.d(TAG, "✅ 文件删除成功 (直接删除): $filePath")
-                return true
-            }
-            Log.d(TAG, "直接删除失败，尝试其他方法")
+        if (file.exists() && file.delete()) {
+            Log.d(TAG, "✅ 文件删除成功: $filePath")
+            return true
         }
 
-        // 方法2：如果是 content:// URI，尝试通过 ContentResolver 删除
         if (filePath.startsWith("content://")) {
             val uri = filePath.toUri()
-            try {
-                val deleted = context.contentResolver.delete(uri, null, null)
-                if (deleted > 0) {
-                    Log.d(TAG, "✅ 文件删除成功 (ContentResolver): $filePath")
-                    return true
-                }
-            } catch (e: Exception) {
-                Log.d(TAG, "ContentResolver 删除失败: ${e.message}")
-            }
-        }
-
-        // 方法3：尝试通过 MediaStore 删除
-        val uriFromPath = getFileUriFromPath(context, filePath)
-        if (uriFromPath != null) {
-            try {
-                val deleted = context.contentResolver.delete(uriFromPath, null, null)
-                if (deleted > 0) {
-                    Log.d(TAG, "✅ 文件删除成功 (MediaStore): $filePath")
-                    return true
-                }
-            } catch (e: Exception) {
-                Log.d(TAG, "MediaStore 删除失败: ${e.message}")
-            }
-        }
-
-        // 方法4：尝试通过 DocumentFile 删除（适用于 Android/data 目录）
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            try {
-                val docFile = DocumentFile.fromFile(file)
-                if (docFile.exists()) {
-                    val deleted = docFile.delete()
-                    if (deleted) {
-                        Log.d(TAG, "✅ 文件删除成功 (DocumentFile): $filePath")
-                        return true
-                    }
-                }
-            } catch (e: Exception) {
-                Log.d(TAG, "DocumentFile 删除失败: ${e.message}")
-            }
-        }
-
-        // 方法5：尝试清空文件内容后删除
-        try {
-            val fos = FileOutputStream(file, false)
-            fos.close()
-            val deleted = file.delete()
-            if (deleted) {
-                Log.d(TAG, "✅ 文件删除成功 (清空后删除): $filePath")
+            if (context.contentResolver.delete(uri, null, null) > 0) {
+                Log.d(TAG, "✅ 文件删除成功 (ContentResolver): $filePath")
                 return true
             }
-        } catch (e: Exception) {
-            Log.d(TAG, "清空后删除失败: ${e.message}")
+        }
+
+        val uriFromPath = getFileUriFromPath(context, filePath)
+        if (uriFromPath != null && context.contentResolver.delete(uriFromPath, null, null) > 0) {
+            Log.d(TAG, "✅ 文件删除成功 (MediaStore): $filePath")
+            return true
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            val docFile = DocumentFile.fromFile(file)
+            if (docFile.exists() && docFile.delete()) {
+                Log.d(TAG, "✅ 文件删除成功 (DocumentFile): $filePath")
+                return true
+            }
         }
 
         Log.w(TAG, "❌ 文件删除失败: $filePath")
         false
     } catch (e: Exception) {
-        Log.e(TAG, "删除文件异常: $filePath", e)
+        Log.e(TAG, "删除文件异常", e)
         false
     }
 }
 
 /**
  * 批量删除文件
- *
- * @param context Context
- * @param filePaths 文件路径列表
- * @return 成功删除的数量
  */
 fun deleteFilesCompat(context: Context, filePaths: List<String>): Int {
     var successCount = 0
@@ -404,73 +442,46 @@ fun deleteFilesCompat(context: Context, filePaths: List<String>): Int {
 }
 
 /**
- * 检查文件是否可读（兼容 Android 11+）
+ * 检查文件是否可读
  */
 fun isFileReadableCompat(context: Context, filePath: String): Boolean {
-    if (filePath.isEmpty()) {
-        return false
-    }
+    if (filePath.isEmpty()) return false
 
     return try {
-        // 方法1：直接检查
         val file = File(filePath)
-        if (file.exists() && file.canRead()) {
+        if (file.exists() && file.canRead()) return true
+
+        val uri = getFileUriFromPath(context, filePath)
+        if (uri != null) {
+            context.contentResolver.openInputStream(uri)?.use { it.close() }
             return true
         }
 
-        // 方法2：尝试通过 ContentResolver 读取
-        val uri = getFileUriFromPath(context, filePath)
-        if (uri != null) {
-            try {
-                context.contentResolver.openInputStream(uri)?.use {
-                    it.close()
-                    return true
-                }
-            } catch ( _ : Exception) {
-                // 忽略
-            }
-        }
-
         false
-    } catch ( _ : Exception) {
+    } catch (_: Exception) {
         false
     }
 }
 
 /**
- * 获取文件大小（兼容 Android 11+）
- *
- * @return 文件大小（字节），-1 表示获取失败
+ * 获取文件大小
  */
 fun getFileSizeCompat(context: Context, filePath: String): Long {
-    if (filePath.isEmpty()) {
-        return -1
-    }
+    if (filePath.isEmpty()) return -1
 
     return try {
-        // 方法1：直接获取
         val file = File(filePath)
-        if (file.exists()) {
-            return file.length()
-        }
+        if (file.exists()) return file.length()
 
-        // 方法2：通过 ContentResolver 获取
         val uri = getFileUriFromPath(context, filePath)
         if (uri != null) {
-            try {
-                val pfd = context.contentResolver.openFileDescriptor(uri, "r")
-                pfd?.let {
-                    val size = it.statSize
-                    it.close()
-                    return size
-                }
-            } catch ( _ : Exception) {
-                // 忽略
+            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                return pfd.statSize
             }
         }
 
         -1
-    } catch ( _ : Exception) {
+    } catch (_: Exception) {
         -1
     }
 }

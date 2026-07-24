@@ -922,6 +922,7 @@ class FFmpegViewModel : ViewModel() {
     // 执行命令相关方法
     // ============================================================
 
+
     fun executeCommandWithCallback(
         command: String,
         onComplete: (Boolean, String) -> Unit
@@ -929,6 +930,30 @@ class FFmpegViewModel : ViewModel() {
         viewModelScope.launch {
             _isExecuting.value = true
             _executionResult.value = "正在执行命令: $command\n\n"
+
+            // 解析输入和输出路径，创建历史记录
+            val (inputPath, outputPath) = parsePathsFromCommand(command)
+            val taskId = UUID.randomUUID().toString()
+            val taskType = "自定义命令"
+
+            // 如果有输入和输出路径，创建历史记录
+            if (inputPath != null && outputPath != null) {
+                val task = ConversionTask(
+                    id = taskId,
+                    inputPath = inputPath,
+                    outputPath = outputPath,
+                    type = taskType,
+                    status = "进行中",
+                    progress = 0f,
+                    startTime = System.currentTimeMillis()
+                )
+                historyTasks.add(0, task)
+                try {
+                    database?.historyDao()?.insert(task.toHistory())
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
 
             try {
                 val logCallback = LogCallback { log ->
@@ -948,6 +973,24 @@ class FFmpegViewModel : ViewModel() {
                         { session ->
                             viewModelScope.launch(Dispatchers.Main) {
                                 val success = handleSessionResultWithCallback(session)
+
+                                // 更新历史记录状态
+                                if (inputPath != null && outputPath != null) {
+                                    val taskIndex = historyTasks.indexOfFirst { it.id == taskId }
+                                    if (taskIndex >= 0) {
+                                        historyTasks[taskIndex] = historyTasks[taskIndex].copy(
+                                            status = if (success) "完成" else "失败",
+                                            progress = if (success) 1f else 0f,
+                                            endTime = System.currentTimeMillis()
+                                        )
+                                        try {
+                                            database?.historyDao()?.update(historyTasks[taskIndex].toHistory())
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                        }
+                                    }
+                                }
+
                                 val message = if (success) {
                                     "✅ 命令执行成功"
                                 } else {
@@ -965,9 +1008,70 @@ class FFmpegViewModel : ViewModel() {
                 val errorMessage = "❌ 执行异常: ${e.message}"
                 _executionResult.update { it + "\n$errorMessage" }
                 _isExecuting.value = false
+
+                // 更新历史记录为失败状态
+                if (inputPath != null && outputPath != null) {
+                    val taskIndex = historyTasks.indexOfFirst { it.id == taskId }
+                    if (taskIndex >= 0) {
+                        historyTasks[taskIndex] = historyTasks[taskIndex].copy(
+                            status = "失败",
+                            endTime = System.currentTimeMillis()
+                        )
+                        try {
+                            database?.historyDao()?.update(historyTasks[taskIndex].toHistory())
+                        } catch (_: Exception) { }
+                    }
+                }
+
                 onComplete(false, errorMessage)
             }
         }
+    }
+
+    // ============================================================
+    // 从命令中解析输入和输出路径
+    // ============================================================
+    private fun parsePathsFromCommand(command: String): Pair<String?, String?> {
+        var inputPath: String? = null
+        var outputPath: String? = null
+
+        // 匹配 -i "路径" 或 -i 路径
+        val inputPattern = Regex("-i\\s+\"([^\"]+)\"")
+        val inputPattern2 = Regex("-i\\s+([^\\s]+)")
+
+        inputPattern.find(command)?.let {
+            inputPath = it.groupValues[1]
+        } ?: run {
+            inputPattern2.find(command)?.let {
+                inputPath = it.groupValues[1]
+            }
+        }
+
+        // 匹配最后一个不带 - 前缀的参数作为输出路径
+        val parts = command.split("\\s+".toRegex())
+        // 从后往前找，跳过 -y 等选项
+        var i = parts.size - 1
+        while (i >= 0) {
+            val part = parts[i]
+            if (!part.startsWith("-") && !part.startsWith("\"")) {
+                // 可能是输出路径
+                outputPath = part.trim('"')
+                break
+            }
+            i--
+        }
+
+        // 如果输出路径没有找到，尝试匹配带引号的
+        if (outputPath == null) {
+            val outputPattern = Regex("\"([^\"]+)\"")
+            val matches = outputPattern.findAll(command).toList()
+            if (matches.size >= 2) {
+                // 最后一个引号内的可能是输出路径
+                outputPath = matches.last().groupValues[1]
+            }
+        }
+
+        return Pair(inputPath, outputPath)
     }
 
     private fun handleSessionResultWithCallback(session: FFmpegSession): Boolean {
